@@ -1,0 +1,1964 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ビジネス文書検定 採点補助ツール</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.8.0/mammoth.browser.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/diff@5.1.0/dist/diff.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Hiragino Sans', sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    header {
+      width: 100%;
+      background: linear-gradient(135deg, #1e3a5f, #2563eb);
+      padding: 20px;
+      text-align: center;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }
+
+    header h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: 0.05em; }
+    header p { font-size: 0.85rem; opacity: 0.8; margin-top: 4px; }
+
+    .container {
+      width: 100%;
+      max-width: 960px;
+      padding: 20px;
+      flex: 1;
+    }
+
+    #upload-screen {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      align-items: center;
+    }
+
+    .upload-area {
+      width: 100%;
+      background: #1e293b;
+      border-radius: 16px;
+      padding: 24px;
+    }
+
+    .upload-area h2 { font-size: 1.1rem; margin-bottom: 16px; }
+
+    .drop-zone {
+      border: 2px dashed #334155;
+      border-radius: 12px;
+      padding: 32px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+    }
+
+    .drop-zone:hover, .drop-zone.dragover {
+      border-color: #2563eb;
+      background: rgba(37, 99, 235, 0.08);
+    }
+
+    .drop-zone.has-file {
+      border-color: #22c55e;
+      background: rgba(34, 197, 94, 0.08);
+    }
+
+    .drop-zone p { font-size: 0.9rem; color: #94a3b8; }
+    .drop-zone .file-name { color: #22c55e; font-weight: 600; font-size: 1rem; }
+    .drop-zone input[type="file"] { display: none; }
+
+    .btn {
+      display: inline-block;
+      padding: 14px 40px;
+      background: linear-gradient(135deg, #2563eb, #1d4ed8);
+      color: #fff;
+      border: none;
+      border-radius: 12px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.1s, box-shadow 0.2s;
+    }
+
+    .btn:hover { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(37, 99, 235, 0.4); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+
+    .btn-secondary { background: #334155; }
+    .btn-secondary:hover { box-shadow: 0 4px 16px rgba(51, 65, 85, 0.4); }
+
+    .error-msg { color: #f87171; font-size: 0.85rem; text-align: center; min-height: 1.2em; }
+
+    #loading-screen {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      padding: 60px 20px;
+    }
+
+    .spinner {
+      width: 48px; height: 48px;
+      border: 4px solid #334155;
+      border-top-color: #2563eb;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    #result-screen {
+      display: none;
+      flex-direction: column;
+      gap: 20px;
+      align-items: center;
+    }
+
+    .match-rate-card {
+      width: 100%;
+      background: #1e293b;
+      border-radius: 16px;
+      padding: 24px;
+      text-align: center;
+    }
+
+    .match-rate-card h2 { font-size: 1rem; margin-bottom: 12px; color: #94a3b8; }
+    .match-rate-value { font-size: 3rem; font-weight: 800; }
+    .rate-high { color: #22c55e; }
+    .rate-mid { color: #eab308; }
+    .rate-low { color: #f87171; }
+
+    .buttons-row { display: flex; gap: 12px; }
+
+    .line-stats {
+      width: 100%;
+      background: #1e293b;
+      border-radius: 16px;
+      padding: 24px;
+    }
+
+    .line-stats h2 { font-size: 1.1rem; margin-bottom: 16px; }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    @media (max-width: 640px) { .stats-grid { grid-template-columns: 1fr; } }
+
+    .stats-panel { background: #0f172a; border-radius: 12px; padding: 16px; }
+
+    .stats-panel h3 {
+      font-size: 0.9rem; color: #94a3b8;
+      margin-bottom: 12px; padding-bottom: 8px;
+      border-bottom: 1px solid #334155;
+    }
+
+    .stat-row {
+      display: flex; justify-content: space-between;
+      padding: 6px 0; font-size: 0.85rem;
+      border-bottom: 1px solid #1e293b;
+    }
+
+    .stat-label { color: #94a3b8; }
+    .stat-value { font-weight: 600; }
+    .stat-match { color: #22c55e; }
+    .stat-mismatch { color: #f87171; }
+
+    .diff-section {
+      width: 100%;
+      background: #1e293b;
+      border-radius: 16px;
+      padding: 24px;
+    }
+
+    .diff-section h2 { font-size: 1.1rem; margin-bottom: 8px; }
+
+    .diff-legend {
+      display: flex; gap: 20px;
+      margin-bottom: 16px; font-size: 0.8rem; flex-wrap: wrap;
+    }
+
+    .legend-item { display: flex; align-items: center; gap: 6px; }
+
+    .legend-color { width: 16px; height: 16px; border-radius: 4px; }
+    .legend-color.removed { background: rgba(239, 68, 68, 0.3); border: 1px solid #ef4444; }
+    .legend-color.added { background: rgba(34, 197, 94, 0.3); border: 1px solid #22c55e; }
+
+    .diff-view { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+    @media (max-width: 640px) { .diff-view { grid-template-columns: 1fr; } }
+
+    .diff-panel { background: #0f172a; border-radius: 12px; padding: 16px; overflow: auto; }
+
+    .diff-panel h3 {
+      font-size: 0.9rem; color: #94a3b8;
+      margin-bottom: 12px; padding-bottom: 8px;
+      border-bottom: 1px solid #334155;
+    }
+
+    .diff-content {
+      font-size: 0.9rem;
+      line-height: 1.8;
+      white-space: pre;
+      word-break: normal;
+      overflow-x: auto;
+      display: block;
+    }
+
+    .diff-removed {
+      background: rgba(239, 68, 68, 0.25); color: #fca5a5;
+      text-decoration: line-through; border-radius: 3px; padding: 1px 3px;
+    }
+
+    .diff-added {
+      background: rgba(34, 197, 94, 0.25); color: #86efac;
+      border-radius: 3px; padding: 1px 3px;
+    }
+
+    .chars-per-line-warning {
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      border-radius: 10px; padding: 14px 18px; margin-top: 12px;
+      font-size: 0.85rem; color: #fca5a5;
+    }
+
+    .chars-per-line-warning strong { color: #f87171; }
+
+    .cpl-info { display: flex; gap: 24px; margin-top: 12px; flex-wrap: wrap; }
+
+    .cpl-item {
+      background: #0f172a; border-radius: 10px;
+      padding: 12px 18px; flex: 1; min-width: 150px; text-align: center;
+    }
+
+    .cpl-label { font-size: 0.75rem; color: #94a3b8; margin-bottom: 4px; }
+    .cpl-value { font-size: 1.3rem; font-weight: 700; }
+    .cpl-match { color: #22c55e; }
+    .cpl-mismatch { color: #f87171; }
+
+    /* ===== 書式・注意事項チェックセクション ===== */
+    .format-check-section {
+      width: 100%;
+      background: #1e293b;
+      border-radius: 16px;
+      padding: 24px;
+    }
+
+    .format-check-section h2 { font-size: 1.1rem; margin-bottom: 4px; }
+
+    .format-check-subtitle {
+      font-size: 0.8rem; color: #64748b; margin-bottom: 16px;
+    }
+
+    .check-list { display: flex; flex-direction: column; gap: 10px; }
+
+    .check-item {
+      display: flex; align-items: flex-start; gap: 12px;
+      background: #0f172a; border-radius: 10px;
+      padding: 14px 16px; border-left: 4px solid transparent;
+    }
+
+    .check-item.pass { border-left-color: #22c55e; }
+    .check-item.fail { border-left-color: #f87171; }
+    .check-item.warn { border-left-color: #eab308; }
+    .check-item.unknown { border-left-color: #64748b; }
+    .check-item.skip { border-left-color: #334155; }
+
+    .check-badge {
+      flex-shrink: 0; width: 28px; height: 28px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.85rem; font-weight: 700;
+    }
+
+    .check-badge.pass { background: rgba(34, 197, 94, 0.2); color: #22c55e; }
+    .check-badge.fail { background: rgba(248, 113, 113, 0.2); color: #f87171; }
+    .check-badge.warn { background: rgba(234, 179, 8, 0.2); color: #eab308; }
+    .check-badge.unknown { background: rgba(100, 116, 139, 0.2); color: #94a3b8; }
+    .check-badge.skip { background: rgba(51, 65, 85, 0.4); color: #64748b; }
+
+    .check-body { flex: 1; }
+    .check-title { font-size: 0.9rem; font-weight: 600; margin-bottom: 4px; }
+    .check-detail { font-size: 0.8rem; color: #94a3b8; line-height: 1.5; }
+    .check-detail.fail-detail { color: #fca5a5; }
+    .check-detail.warn-detail { color: #fde68a; }
+
+    .check-summary { display: flex; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
+
+    .summary-badge {
+      display: flex; align-items: center; gap: 6px;
+      background: #0f172a; border-radius: 8px;
+      padding: 8px 14px; font-size: 0.85rem;
+    }
+
+    .summary-dot { width: 10px; height: 10px; border-radius: 50%; }
+    .summary-dot.pass { background: #22c55e; }
+    .summary-dot.fail { background: #f87171; }
+    .summary-dot.warn { background: #eab308; }
+    .summary-dot.unknown { background: #64748b; }
+
+    /* 抽出されたルール表示 */
+    .rules-card {
+      width: 100%;
+      background: #1e293b;
+      border-radius: 16px;
+      padding: 24px;
+    }
+
+    .rules-card h2 { font-size: 1.1rem; margin-bottom: 4px; }
+
+    .rules-subtitle {
+      font-size: 0.8rem; color: #64748b; margin-bottom: 16px;
+    }
+
+    .rules-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    @media (max-width: 640px) { .rules-grid { grid-template-columns: 1fr; } }
+
+    .rule-item {
+      background: #0f172a; border-radius: 10px; padding: 12px 14px;
+      font-size: 0.82rem;
+    }
+
+    .rule-label { color: #64748b; font-size: 0.75rem; margin-bottom: 4px; }
+    .rule-value { color: #e2e8f0; font-weight: 600; }
+    .rule-value.detected { color: #38bdf8; }
+    .rule-value.not-detected { color: #475569; font-style: italic; }
+
+    .exam-type-badge {
+      display: inline-block;
+      padding: 4px 14px;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      margin-left: 10px;
+      vertical-align: middle;
+    }
+    .exam-type-badge.speed { background: rgba(37, 99, 235, 0.2); color: #60a5fa; }
+    .exam-type-badge.practical { background: rgba(168, 85, 247, 0.2); color: #c084fc; }
+
+    /* ===== 表比較セクション ===== */
+    .table-comparison-section {
+      width: 100%;
+      background: #1e293b;
+      border-radius: 16px;
+      padding: 24px;
+    }
+    .table-comparison-section h2 { font-size: 1.1rem; margin-bottom: 16px; }
+    .table-comparison-pair {
+      margin-bottom: 20px;
+    }
+    .table-comparison-pair h3 {
+      font-size: 0.95rem; color: #94a3b8; margin-bottom: 12px;
+    }
+    .table-comparison-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+    }
+    @media (max-width: 640px) { .table-comparison-grid { grid-template-columns: 1fr; } }
+    .table-comparison-grid .table-side {
+      background: #0f172a; border-radius: 12px; padding: 12px; overflow-x: auto;
+    }
+    .table-comparison-grid .table-side h4 {
+      font-size: 0.85rem; color: #94a3b8; margin-bottom: 8px;
+    }
+    .table-comparison-grid table {
+      width: 100%; border-collapse: collapse; font-size: 0.8rem;
+    }
+    .table-comparison-grid td, .table-comparison-grid th {
+      border: 1px solid #334155; padding: 6px 8px; text-align: left;
+    }
+    .table-comparison-grid th {
+      background: #1e293b; color: #94a3b8; font-weight: 600;
+    }
+    .table-cell-match { background: rgba(34, 197, 94, 0.15); color: #86efac; }
+    .table-cell-mismatch { background: rgba(239, 68, 68, 0.15); color: #fca5a5; }
+    .table-cell-empty { background: rgba(100, 116, 139, 0.1); color: #64748b; font-style: italic; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>ビジネス文書検定 採点補助ツール</h1>
+    <p>Word解答と模範解答PDFを比較・書式チェックします</p>
+  </header>
+
+  <div class="container">
+    <!-- Upload Screen -->
+    <div id="upload-screen">
+      <div class="upload-area">
+        <h2>模範解答（PDF）</h2>
+        <div class="drop-zone" id="pdf-drop">
+          <p>クリックまたはドラッグ＆ドロップでPDFファイルを選択</p>
+          <input type="file" id="pdf-input" accept=".pdf">
+        </div>
+      </div>
+
+      <div class="upload-area">
+        <h2>利用者の解答（Word）</h2>
+        <div class="drop-zone" id="word-drop">
+          <p>クリックまたはドラッグ＆ドロップでWordファイルを選択</p>
+          <input type="file" id="word-input" accept=".docx">
+        </div>
+      </div>
+
+      <p class="error-msg" id="error-msg"></p>
+      <button class="btn" id="compare-btn" onclick="compare()">比較・チェックする</button>
+    </div>
+
+    <!-- Loading Screen -->
+    <div id="loading-screen">
+      <div class="spinner"></div>
+      <p>ファイルを解析中...</p>
+    </div>
+
+    <!-- Result Screen -->
+    <div id="result-screen">
+      <div class="match-rate-card">
+        <h2>一致率</h2>
+        <div class="match-rate-value" id="match-rate">--</div>
+      </div>
+
+      <!-- PDFから読み取ったルール表示 -->
+      <div class="rules-card">
+        <h2>PDFから読み取ったルール</h2>
+        <p class="rules-subtitle">模範解答PDFの書式設定・注意事項を自動解析した結果です</p>
+        <div class="rules-grid" id="rules-grid"></div>
+      </div>
+
+      <!-- 書式設定・注意事項チェック -->
+      <div class="format-check-section">
+        <h2>書式設定・注意事項チェック</h2>
+        <p class="format-check-subtitle">上記ルールに基づいてWordファイルを判定した結果です</p>
+        <div class="check-summary" id="check-summary"></div>
+        <div class="check-list" id="check-list"></div>
+      </div>
+
+      <div class="line-stats">
+        <h2>行・文字数の比較</h2>
+        <div class="cpl-info">
+          <div class="cpl-item">
+            <div class="cpl-label">模範解答 1行の文字数</div>
+            <div class="cpl-value" id="pdf-cpl">-</div>
+          </div>
+          <div class="cpl-item">
+            <div class="cpl-label">解答(Word) 1行の文字数</div>
+            <div class="cpl-value" id="word-cpl">-</div>
+          </div>
+        </div>
+        <div id="cpl-warning"></div>
+        <div class="stats-grid" style="margin-top:16px">
+          <div class="stats-panel">
+            <h3>模範解答（PDF）</h3>
+            <div class="stat-row">
+              <span class="stat-label">行数</span>
+              <span class="stat-value" id="pdf-lines">-</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">総文字数</span>
+              <span class="stat-value" id="pdf-chars">-</span>
+            </div>
+          </div>
+          <div class="stats-panel">
+            <h3>利用者の解答（Word）</h3>
+            <div class="stat-row">
+              <span class="stat-label">行数</span>
+              <span class="stat-value" id="word-lines">-</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">総文字数</span>
+              <span class="stat-value" id="word-chars">-</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 表比較セクション（動的に表示） -->
+      <div class="table-comparison-section" id="table-comparison-section" style="display:none;">
+        <h2>表の比較</h2>
+        <div id="table-comparison-content"></div>
+      </div>
+
+      <div class="diff-section">
+        <h2>差分ビュー</h2>
+        <div class="diff-legend">
+          <div class="legend-item">
+            <div class="legend-color removed"></div>
+            <span>模範解答にあって解答にない部分</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-color added"></div>
+            <span>解答にあって模範解答にない部分</span>
+          </div>
+        </div>
+        <div class="diff-view">
+          <div class="diff-panel">
+            <h3>模範解答（PDF）</h3>
+            <div class="diff-content" id="diff-left"></div>
+          </div>
+          <div class="diff-panel">
+            <h3>利用者の解答（Word）</h3>
+            <div class="diff-content" id="diff-right"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="buttons-row">
+        <button class="btn btn-secondary" onclick="goBack()">戻る</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+    let pdfFile = null;
+    let wordFile = null;
+
+    // =====================================================
+    // Drop zone
+    // =====================================================
+    function setupDropZone(dropId, inputId, accept, onFile) {
+      const drop = document.getElementById(dropId);
+      const input = document.getElementById(inputId);
+      drop.addEventListener('click', () => input.click());
+      drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('dragover'); });
+      drop.addEventListener('dragleave', () => drop.classList.remove('dragover'));
+      drop.addEventListener('drop', (e) => {
+        e.preventDefault(); drop.classList.remove('dragover');
+        const file = e.dataTransfer.files[0];
+        if (file) onFile(file, drop);
+      });
+      input.addEventListener('change', () => { const file = input.files[0]; if (file) onFile(file, drop); });
+    }
+
+    function setFileDisplay(drop, fileName) {
+      drop.classList.add('has-file');
+      drop.innerHTML = `<p class="file-name">${escapeHtml(fileName)}</p>`;
+    }
+
+    setupDropZone('pdf-drop', 'pdf-input', '.pdf', (file, drop) => { pdfFile = file; setFileDisplay(drop, file.name); });
+    setupDropZone('word-drop', 'word-input', '.docx', (file, drop) => { wordFile = file; setFileDisplay(drop, file.name); });
+
+    // =====================================================
+    // PDF テキスト抽出（ページ単位）
+    // =====================================================
+    async function extractPdfPageText(pdf, pageNum) {
+      const page = await pdf.getPage(pageNum);
+      const content = await page.getTextContent();
+      const items = content.items;
+      if (items.length === 0) return '';
+      const sorted = items.slice().sort((a, b) => {
+        const ay = Math.round(a.transform[5]);
+        const by = Math.round(b.transform[5]);
+        if (Math.abs(ay - by) > 3) return by - ay;
+        return a.transform[4] - b.transform[4];
+      });
+
+      // Group items into lines by Y coordinate
+      const lines = [];
+      let currentLine = null;
+      for (const item of sorted) {
+        const y = Math.round(item.transform[5]);
+        if (!currentLine || Math.abs(y - currentLine.y) > 3) {
+          currentLine = { y, items: [] };
+          lines.push(currentLine);
+        }
+        currentLine.items.push(item);
+      }
+
+      // Find the most common X start position (mode) = normal left margin
+      const xStarts = [];
+      for (const line of lines) {
+        const firstItem = line.items.find(i => i.str.trim());
+        if (firstItem) xStarts.push(Math.round(firstItem.transform[4]));
+      }
+      const xFreq = {};
+      let modeX = xStarts[0] || 0;
+      let modeCount = 0;
+      for (const x of xStarts) {
+        xFreq[x] = (xFreq[x] || 0) + 1;
+        if (xFreq[x] > modeCount) { modeCount = xFreq[x]; modeX = x; }
+      }
+
+      // Build text with indent detection
+      let pageText = '';
+      for (let i = 0; i < lines.length; i++) {
+        if (i > 0) pageText += '\n';
+        const line = lines[i];
+        const firstItem = line.items.find(it => it.str.trim());
+        if (firstItem) {
+          const x = Math.round(firstItem.transform[4]);
+          // Line starts to the right of the normal margin = paragraph indent
+          if (x > modeX + 5) {
+            pageText += '\u3000';
+          }
+        }
+        for (const item of line.items) {
+          pageText += item.str;
+        }
+      }
+      return pageText;
+    }
+
+    async function extractPdfAllPages(file) {
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      const pages = [];
+      for (let i = 1; i <= pdf.numPages; i++) {
+        pages.push(await extractPdfPageText(pdf, i));
+      }
+      return pages; // pages[0] = 1ページ目, pages[1] = 2ページ目, ...
+    }
+
+    // =====================================================
+    // PDF表抽出（座標ベース）
+    // =====================================================
+    async function extractPdfTables(file) {
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      const tables = [];
+
+      for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+        const page = await pdf.getPage(pageNum);
+        const content = await page.getTextContent();
+        const items = content.items.filter(item => item.str.trim());
+        if (items.length === 0) continue;
+
+        // Y座標でグループ化（行検出）、Y閾値=3pt
+        const rowMap = new Map();
+        for (const item of items) {
+          const y = Math.round(item.transform[5]);
+          let foundKey = null;
+          for (const key of rowMap.keys()) {
+            if (Math.abs(key - y) <= 3) { foundKey = key; break; }
+          }
+          if (foundKey !== null) {
+            rowMap.get(foundKey).push(item);
+          } else {
+            rowMap.set(y, [item]);
+          }
+        }
+
+        // Y座標降順（上から下）でソート
+        const rows = [...rowMap.entries()]
+          .sort((a, b) => b[0] - a[0])
+          .map(([y, items]) => ({ y, items: items.sort((a, b) => a.transform[4] - b.transform[4]) }));
+
+        // 各行のX開始位置を収集し、カラム位置を検出
+        // 3つ以上の明確なカラム位置を持つ連続行群を「表」として検出
+        const allXPositions = [];
+        for (const row of rows) {
+          const xPositions = row.items.map(item => Math.round(item.transform[4]));
+          allXPositions.push(xPositions);
+        }
+
+        // カラム位置の候補を収集（全行のX座標をクラスタリング）
+        const xFreq = {};
+        for (const xPositions of allXPositions) {
+          const seen = new Set();
+          for (const x of xPositions) {
+            // 近い位置を同じカラムとみなす（閾値=15pt）
+            const rounded = Math.round(x / 15) * 15;
+            if (!seen.has(rounded)) {
+              xFreq[rounded] = (xFreq[rounded] || 0) + 1;
+              seen.add(rounded);
+            }
+          }
+        }
+
+        // 頻出するX位置（全行の30%以上に出現）をカラム位置とする
+        const minFreq = Math.max(3, rows.length * 0.3);
+        const colPositions = Object.entries(xFreq)
+          .filter(([_, count]) => count >= minFreq)
+          .map(([x]) => parseInt(x))
+          .sort((a, b) => a - b);
+
+        // 3カラム未満は表ではない
+        if (colPositions.length < 3) continue;
+
+        // 表に属する行を特定（3カラム以上にアイテムが分布する行）
+        const tableRows = [];
+        for (let ri = 0; ri < rows.length; ri++) {
+          const row = rows[ri];
+          const matchedCols = new Set();
+          for (const item of row.items) {
+            const x = Math.round(item.transform[4]);
+            for (let ci = 0; ci < colPositions.length; ci++) {
+              if (Math.abs(x - colPositions[ci]) <= 15) {
+                matchedCols.add(ci);
+                break;
+              }
+            }
+          }
+          if (matchedCols.size >= 2) {
+            tableRows.push({ rowIndex: ri, row, matchedCols });
+          }
+        }
+
+        // 連続する表行をグループ化
+        if (tableRows.length < 2) continue;
+
+        let groupStart = 0;
+        for (let i = 0; i <= tableRows.length; i++) {
+          const isEnd = i === tableRows.length || (i > 0 && tableRows[i].rowIndex - tableRows[i - 1].rowIndex > 2);
+          if (isEnd) {
+            const group = tableRows.slice(groupStart, i);
+            if (group.length >= 2) {
+              // セルごとにテキストを抽出
+              const cells = [];
+              for (let ri = 0; ri < group.length; ri++) {
+                const row = group[ri].row;
+                for (let ci = 0; ci < colPositions.length; ci++) {
+                  const colX = colPositions[ci];
+                  const nextColX = ci < colPositions.length - 1 ? colPositions[ci + 1] : Infinity;
+                  const cellItems = row.items.filter(item => {
+                    const x = Math.round(item.transform[4]);
+                    return x >= colX - 15 && x < nextColX - 15;
+                  });
+                  const text = cellItems.map(item => item.str).join('').trim();
+                  cells.push({ row: ri, col: ci, text });
+                }
+              }
+              tables.push({ rows: group.length, cols: colPositions.length, cells });
+            }
+            groupStart = i;
+          }
+        }
+      }
+      return tables;
+    }
+
+    // =====================================================
+    // PDFから書式設定・注意事項ルールを動的に抽出
+    // =====================================================
+    function extractRulesFromPdf(pdfText) {
+      const rules = {
+        // 試験タイプ
+        examType: 'speed',           // 'speed' or 'practical'
+        // 書式設定
+        charsPerLine: null,          // 1行の文字数（数値）
+        fontType: null,              // フォント種類（文字列）
+        noProportionalFont: null,    // プロポーショナルフォント不使用（boolean）
+        // 注意事項
+        fullWidthRequired: null,     // 全角文字必須（boolean）
+        longVowelRequired: null,     // 長音記号使用必須（boolean）
+        punctuationMixForbidden: null, // 句読点混用禁止（boolean）
+        punctuationAltAllowed: null,   // 句点↔ピリオド、読点↔コンマ代替可（boolean）
+        noRepeatInput: null,           // 繰り返し入力禁止（boolean）
+        // 実技用ルール
+        margins: null,               // 余白（mm）
+        fontSize: null,              // フォントサイズ（pt）
+        linesPerPage: null,          // 1ページの行数
+        // 生テキスト（デバッグ用）
+        formatSection: '',
+        noticeSection: ''
+      };
+
+      // 改行を正規化
+      const text = pdfText.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
+      // 試験タイプ自動判定
+      if (/ビジネス文書部門|実技部門/.test(text)) {
+        rules.examType = 'practical';
+      } else if (/速度部門/.test(text)) {
+        rules.examType = 'speed';
+      }
+
+      const lines = text.split('\n');
+
+      // 書式設定セクションと注意事項セクションを切り出す
+      let inFormat = false;
+      let inNotice = false;
+      let formatLines = [];
+      let noticeLines = [];
+
+      for (const line of lines) {
+        const trimmed = line.replace(/[\x00-\x1F\x7F]/g, '').trim(); // 制御文字除去
+
+        // セクション開始検出
+        if (/[〔\[【「][\s　]*書[\s　]*式[\s　]*設[\s　]*定[\s　]*[〕\]】」]/.test(trimmed)) {
+          inFormat = true; inNotice = false; continue;
+        }
+        if (/[〔\[【「][\s　]*注[\s　]*意[\s　]*事[\s　]*項[\s　]*[〕\]】」]/.test(trimmed)) {
+          inNotice = true; inFormat = false; continue;
+        }
+
+        if (inFormat) {
+          // 注意事項セクション開始で終了
+          if (/[〔\[【「][\s　]*注[\s　]*意/.test(trimmed)) { inFormat = false; inNotice = true; continue; }
+          if (trimmed) formatLines.push(trimmed);
+        }
+        if (inNotice) {
+          if (trimmed) noticeLines.push(trimmed);
+        }
+      }
+
+      rules.formatSection = formatLines.join('\n');
+      rules.noticeSection = noticeLines.join('\n');
+
+      // ---- 書式設定 a: 1行の文字数 ----
+      // 例: "ａ．1行の文字数を30字に設定すること。"
+      // 例: "a. 1行の文字数を３０字に設定すること。"
+      const cplMatch = rules.formatSection.match(
+        /1行[のの]文字数[をを][^\d０-９]*([0-9０-９]+)[字文]/
+      );
+      if (cplMatch) {
+        // 全角数字を半角に変換
+        rules.charsPerLine = parseInt(cplMatch[1].replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0)));
+      }
+
+      // ---- 書式設定 b: フォント種類 ----
+      // 例: "ｂ．フォントの種類は明朝体とすること。"
+      const fontMatch = rules.formatSection.match(
+        /フォント[のの]種類[はは]([^\s。、]+)[体とと]/
+      );
+      if (fontMatch) {
+        rules.fontType = fontMatch[1] + '体';
+      }
+
+      // ---- 書式設定 c: プロポーショナルフォント不使用 ----
+      if (/プロポーショナルフォント[はは]使用[しし]ない/.test(rules.formatSection)) {
+        rules.noProportionalFont = true;
+      }
+
+
+      // ---- 注意事項 2: 全角文字 ----
+      if (/すべて全角文字[でで]入力/.test(rules.noticeSection)) {
+        rules.fullWidthRequired = true;
+      }
+
+      // ---- 注意事項 3: 長音記号 ----
+      if (/長音[はは].*長音記号[をを]用[いい]/.test(rules.noticeSection)) {
+        rules.longVowelRequired = true;
+      }
+
+      // ---- 注意事項 5: 句読点混用禁止 ----
+      if (/混用[しし]た場合[はは]エラー/.test(rules.noticeSection) ||
+          /混用[すす]ること[はは]でき[なな]い/.test(rules.noticeSection)) {
+        rules.punctuationMixForbidden = true;
+      }
+      // 句点↔ピリオド、読点↔コンマ代替可
+      if (/句点[にに]代[えわ]てピリオド/.test(rules.noticeSection) ||
+          /読点[にに]代[えわ]てコンマ/.test(rules.noticeSection)) {
+        rules.punctuationAltAllowed = true;
+      }
+
+      // ---- 注意事項 6: 繰り返し入力禁止 ----
+      if (/問題文[をを]繰り返し入力[しし]ない/.test(rules.noticeSection)) {
+        rules.noRepeatInput = true;
+      }
+
+      // ---- 実技用ルール抽出 ----
+      if (rules.examType === 'practical') {
+        const fullText = rules.formatSection + '\n' + rules.noticeSection + '\n' + text;
+
+        // 余白（例: 余白 25mm, 余白は25ｍｍ）
+        const marginMatch = fullText.match(/余白[はを]?\s*([0-9０-９]+)\s*[mｍ]{1,2}/);
+        if (marginMatch) {
+          rules.margins = parseInt(marginMatch[1].replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0)));
+        }
+
+        // フォントサイズ（例: サイズは14ポイント）
+        const fontSizeMatch = fullText.match(/サイズ[はを]?\s*([0-9０-９]+)\s*ポイント/);
+        if (fontSizeMatch) {
+          rules.fontSize = parseInt(fontSizeMatch[1].replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0)));
+        }
+
+        // 行数（例: 1ページの行数を28行）
+        const linesMatch = fullText.match(/1ページ[のに]?\s*行数[はをに]?\s*([0-9０-９]+)\s*行/);
+        if (linesMatch) {
+          rules.linesPerPage = parseInt(linesMatch[1].replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0)));
+        }
+      }
+
+      return rules;
+    }
+
+    // =====================================================
+    // 抽出ルールを画面に表示
+    // =====================================================
+    function renderRules(rules) {
+      const grid = document.getElementById('rules-grid');
+      grid.innerHTML = '';
+
+      // 試験タイプバッジを表示
+      const rulesCard = grid.closest('.rules-card');
+      const h2 = rulesCard.querySelector('h2');
+      // 既存のバッジを除去
+      const existingBadge = h2.querySelector('.exam-type-badge');
+      if (existingBadge) existingBadge.remove();
+      const badgeLabel = rules.examType === 'practical' ? '実技部門' : '速度部門';
+      const badgeClass = rules.examType === 'practical' ? 'practical' : 'speed';
+      h2.innerHTML = `PDFから読み取ったルール<span class="exam-type-badge ${badgeClass}">${badgeLabel}</span>`;
+
+      const items = [
+        { label: '書式設定 a｜1行の文字数', value: rules.charsPerLine !== null ? `${rules.charsPerLine}字` : null },
+        { label: '書式設定 b｜フォント種類', value: rules.fontType || null },
+        { label: '書式設定 c｜プロポーショナルフォント', value: rules.noProportionalFont ? '使用禁止' : null },
+        { label: '注意事項 2｜文字種', value: rules.fullWidthRequired ? '全角文字のみ' : null },
+        { label: '注意事項 3｜長音', value: rules.longVowelRequired ? '長音記号（ー）を使用' : null },
+        { label: '注意事項 5｜句読点混用', value: rules.punctuationMixForbidden ? '混用禁止（エラー）' : null },
+      ];
+
+      // 実技用ルールを追加
+      if (rules.examType === 'practical') {
+        items.push(
+          { label: '実技｜余白', value: rules.margins !== null ? `${rules.margins}mm` : null },
+          { label: '実技｜フォントサイズ', value: rules.fontSize !== null ? `${rules.fontSize}ポイント` : null },
+          { label: '実技｜1ページの行数', value: rules.linesPerPage !== null ? `${rules.linesPerPage}行` : null },
+        );
+      }
+
+      for (const item of items) {
+        const detected = item.value !== null;
+        grid.innerHTML += `
+          <div class="rule-item">
+            <div class="rule-label">${escapeHtml(item.label)}</div>
+            <div class="rule-value ${detected ? 'detected' : 'not-detected'}">
+              ${detected ? escapeHtml(item.value) : '記載なし / 検出不可'}
+            </div>
+          </div>`;
+      }
+    }
+
+    // =====================================================
+    // Wordファイルの詳細情報を取得
+    // =====================================================
+    async function extractWordDetails(file) {
+      const details = {
+        charsPerLine: null,
+        fontNames: [],
+        hasProportionalFont: false,
+        bodyText: '',
+        // 実技用
+        margins: null,           // { top, bottom, left, right } in mm
+        defaultFontSize: null,   // pt
+        linesPerPage: null,
+        paragraphAlignments: [], // [{text, align}]
+        tables: [],              // [{rows, cols, cells}]
+        hasWideScaling: false,   // 横倍角 (200%)
+      };
+
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+        const zip = await JSZip.loadAsync(arrayBuffer);
+        const parser = new DOMParser();
+        const ns = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+
+        const docXml = await zip.file('word/document.xml').async('string');
+        const doc = parser.parseFromString(docXml, 'text/xml');
+
+        // フォントサイズ取得
+        let fontSizeHalfPt = 21;
+        const stylesFile = zip.file('word/styles.xml');
+        if (stylesFile) {
+          const stylesXml = await stylesFile.async('string');
+          const styleDoc = parser.parseFromString(stylesXml, 'text/xml');
+          const docDefaults = styleDoc.getElementsByTagNameNS(ns, 'docDefaults')[0];
+          if (docDefaults) {
+            const sz = docDefaults.getElementsByTagNameNS(ns, 'sz')[0];
+            if (sz) fontSizeHalfPt = parseInt(sz.getAttribute('w:val')) || 21;
+          }
+        }
+
+        // 1行文字数計算
+        const pgSz = doc.getElementsByTagNameNS(ns, 'pgSz')[0];
+        const pgMar = doc.getElementsByTagNameNS(ns, 'pgMar')[0];
+        if (pgSz && pgMar) {
+          const pageWidth = parseInt(pgSz.getAttribute('w:w')) || 11906;
+          const marginLeft = parseInt(pgMar.getAttribute('w:left')) || 1701;
+          const marginRight = parseInt(pgMar.getAttribute('w:right')) || 1701;
+          const textWidth = pageWidth - marginLeft - marginRight;
+
+          // docGrid の charSpace から1行文字数を計算
+          // charSpace の変換係数は docGrid の type により異なる（実測値から逆算）
+          //   fixedCol:      charSpace × 0.2  → twip  (charSpace 小さい: 460 程度)
+          //   linesAndChars: charSpace × 0.02 → twip  (charSpace 大きい: 4573 程度)
+          const fontSizeTwip = fontSizeHalfPt / 2 * 20; // halfPt → twip
+
+          // docGrid は複数存在する場合があるので、charSpace を持つ最後の要素を使う
+          const docGridEls = doc.getElementsByTagNameNS(ns, 'docGrid');
+          let charSpace = null;
+          let gridType = null;
+          for (let gi = 0; gi < docGridEls.length; gi++) {
+            const el = docGridEls[gi];
+            const cs = el.getAttribute('w:charSpace');
+            if (cs !== null) {
+              charSpace = cs;
+              gridType = el.getAttribute('w:type') || gridType;
+            }
+          }
+
+          let gotCpl = false;
+          if (charSpace !== null) {
+            const csVal = parseInt(charSpace);
+            if (!isNaN(csVal) && csVal > 0) {
+              // type に応じた変換係数を選択
+              // fixedCol: 小さい値（~460）→ × 0.2
+              // linesAndChars / その他: 大きい値（~4000以上）→ × 0.02
+              const factor = (gridType === 'fixedCol' || csVal < 1000) ? 0.2 : 0.02;
+              const charSpaceTwip = csVal * factor;
+              const charWidthTwip = fontSizeTwip + charSpaceTwip;
+              details.charsPerLine = Math.round(textWidth / charWidthTwip);
+              gotCpl = true;
+            }
+          }
+          // charSpace が取れなかった場合: フォントサイズのみで推定
+          if (!gotCpl && fontSizeTwip > 0) {
+            details.charsPerLine = Math.round(textWidth / fontSizeTwip);
+          }
+        }
+
+        // ---- 実技用: 余白 (twips → mm, 1 twip = 1/1440 inch = 25.4/1440 mm ≈ /56.7) ----
+        if (pgMar) {
+          details.margins = {
+            top: Math.round((parseInt(pgMar.getAttribute('w:top')) || 0) / 56.7),
+            bottom: Math.round((parseInt(pgMar.getAttribute('w:bottom')) || 0) / 56.7),
+            left: Math.round((parseInt(pgMar.getAttribute('w:left')) || 0) / 56.7),
+            right: Math.round((parseInt(pgMar.getAttribute('w:right')) || 0) / 56.7),
+          };
+        }
+
+        // ---- 実技用: デフォルトフォントサイズ (halfPt → pt) ----
+        details.defaultFontSize = fontSizeHalfPt / 2;
+
+        // ---- 実技用: 1ページの行数 ----
+        if (pgSz && pgMar) {
+          const pageHeight = parseInt(pgSz.getAttribute('w:h')) || 16838;
+          const marginTop = parseInt(pgMar.getAttribute('w:top')) || 1985;
+          const marginBottom = parseInt(pgMar.getAttribute('w:bottom')) || 1701;
+          const textHeight = pageHeight - marginTop - marginBottom;
+          const docGridEls2 = doc.getElementsByTagNameNS(ns, 'docGrid');
+          for (let gi = 0; gi < docGridEls2.length; gi++) {
+            const lp = docGridEls2[gi].getAttribute('w:linePitch');
+            if (lp) {
+              const linePitch = parseInt(lp);
+              if (linePitch > 0) {
+                details.linesPerPage = Math.floor(textHeight / linePitch);
+              }
+            }
+          }
+        }
+
+        // ---- 実技用: 段落配置 (w:jc) ----
+        const paragraphs2 = doc.getElementsByTagNameNS(ns, 'p');
+        for (let pi = 0; pi < paragraphs2.length; pi++) {
+          const p = paragraphs2[pi];
+          const runs = p.getElementsByTagNameNS(ns, 't');
+          let text = '';
+          for (let ri = 0; ri < runs.length; ri++) text += runs[ri].textContent || '';
+          if (!text.trim()) continue;
+
+          const pPr = p.getElementsByTagNameNS(ns, 'pPr')[0];
+          let align = 'left';
+          if (pPr) {
+            const jc = pPr.getElementsByTagNameNS(ns, 'jc')[0];
+            if (jc) align = jc.getAttribute('w:val') || 'left';
+          }
+          details.paragraphAlignments.push({ text: text.trim(), align });
+        }
+
+        // ---- 実技用: 表構造 (w:tbl) ----
+        const tables = doc.getElementsByTagNameNS(ns, 'tbl');
+        for (let ti = 0; ti < tables.length; ti++) {
+          const tbl = tables[ti];
+          const trs = tbl.getElementsByTagNameNS(ns, 'tr');
+          let maxCols = 0;
+          const cells = [];
+          for (let ri = 0; ri < trs.length; ri++) {
+            const tcs = trs[ri].getElementsByTagNameNS(ns, 'tc');
+            if (tcs.length > maxCols) maxCols = tcs.length;
+            for (let ci = 0; ci < tcs.length; ci++) {
+              const tEls = tcs[ci].getElementsByTagNameNS(ns, 't');
+              let cellText = '';
+              for (let t = 0; t < tEls.length; t++) cellText += tEls[t].textContent || '';
+              cells.push({ row: ri, col: ci, text: cellText.trim() });
+            }
+          }
+          details.tables.push({ rows: trs.length, cols: maxCols, cells });
+        }
+
+        // ---- 実技用: 横倍角 (w:w val="200") ----
+        const wEls = doc.getElementsByTagNameNS(ns, 'w');
+        for (let wi = 0; wi < wEls.length; wi++) {
+          // w:w is within w:rPr — check tagName is 'w:w'
+          if (wEls[wi].localName === 'w' && wEls[wi].getAttribute('w:val') === '200') {
+            details.hasWideScaling = true;
+            break;
+          }
+        }
+
+        // フォント名収集（document.xml + styles.xml）
+        const fontSet = new Set();
+        const collectFonts = (xmlDoc) => {
+          const rFontsEls = xmlDoc.getElementsByTagNameNS(ns, 'rFonts');
+          for (const el of rFontsEls) {
+            ['w:ascii', 'w:hAnsi', 'w:eastAsia', 'w:cs'].forEach(attr => {
+              const v = el.getAttribute(attr);
+              if (v) fontSet.add(v);
+            });
+          }
+        };
+        collectFonts(doc);
+        if (stylesFile) {
+          const stylesXml = await stylesFile.async('string');
+          collectFonts(parser.parseFromString(stylesXml, 'text/xml'));
+        }
+        details.fontNames = Array.from(fontSet);
+
+        // プロポーショナルフォント判定
+        const propPatterns = [/^MSP/i, /^MS P/i, /^HGP/i, /^HGS/i, /^ＭＳ Ｐ/i, /^ＭＳＰ/i, /Proportional/i];
+        details.hasProportionalFont = details.fontNames.some(n => propPatterns.some(p => p.test(n)));
+        details.proportionalFontNames = details.fontNames.filter(n => propPatterns.some(p => p.test(n)));
+
+        // ヘッダーファイルは使用しない
+        const headerFile = zip.file('word/header1.xml') ||
+                           zip.file('word/header2.xml') ||
+                           zip.file('word/header3.xml');
+        if (headerFile) {
+          const headerXml = await headerFile.async('string');
+          const headerDoc = parser.parseFromString(headerXml, 'text/xml');
+          // ヘッダー情報は使用しない
+        }
+
+        // 本文テキスト（段落ごとにインデント情報付き）
+        const bodyResult = await mammoth.extractRawText({ arrayBuffer: await file.arrayBuffer() });
+        details.bodyText = bodyResult.value;
+
+        // 段落ごとのインデント情報を取得
+        // w:p > w:pPr > w:ind の firstLine / firstLineChars を検出
+        const paragraphs = doc.getElementsByTagNameNS(ns, 'p');
+        const paraTexts = [];
+        for (let pi = 0; pi < paragraphs.length; pi++) {
+          const p = paragraphs[pi];
+          // 段落のテキストを取得
+          const runs = p.getElementsByTagNameNS(ns, 't');
+          let text = '';
+          for (let ri = 0; ri < runs.length; ri++) {
+            text += runs[ri].textContent || '';
+          }
+          if (!text.trim()) continue;
+
+          // 段落のインデント情報を取得
+          const pPr = p.getElementsByTagNameNS(ns, 'pPr')[0];
+          let hasFirstLineIndent = false;
+          if (pPr) {
+            const ind = pPr.getElementsByTagNameNS(ns, 'ind')[0];
+            if (ind) {
+              const fl = ind.getAttribute('w:firstLine') || ind.getAttribute('w:firstLineChars');
+              if (fl && parseInt(fl) > 0) {
+                hasFirstLineIndent = true;
+              }
+            }
+          }
+
+          // テキストが全角スペースで始まっていなくてもインデント設定がある場合は追加
+          if (hasFirstLineIndent && !text.startsWith('\u3000') && !text.startsWith(' ')) {
+            paraTexts.push('\u3000' + text);
+          } else {
+            paraTexts.push(text);
+          }
+        }
+        details.bodyTextWithIndent = paraTexts.join('\n');
+
+      } catch (e) {
+        console.warn('extractWordDetails error:', e);
+      }
+
+      return details;
+    }
+
+    // =====================================================
+    // 抽出ルールに基づいてWordを判定
+    // =====================================================
+    function runFormatChecks(rules, wordDetails, wordText, pdfTables) {
+      const results = [];
+      const body = wordDetails.bodyText || wordText;
+
+      // ---- 書式設定 a: 1行の文字数 ----
+      if (rules.charsPerLine !== null) {
+        const cpl = wordDetails.charsPerLine;
+        if (cpl === null) {
+          results.push({ category: '書式設定 a', title: `1行の文字数（${rules.charsPerLine}字設定）`,
+            status: 'unknown', detail: '文字数設定を取得できませんでした。' });
+        } else if (cpl === rules.charsPerLine) {
+          results.push({ category: '書式設定 a', title: `1行の文字数（${rules.charsPerLine}字設定）`,
+            status: 'pass', detail: `1行の文字数は ${cpl} 字に正しく設定されています。` });
+        } else {
+          results.push({ category: '書式設定 a', title: `1行の文字数（${rules.charsPerLine}字設定）`,
+            status: 'fail', detail: `1行の文字数が ${cpl} 字になっています。${rules.charsPerLine} 字に変更してください。` });
+        }
+      }
+
+      // ---- 書式設定 b: フォント種類 ----
+      if (rules.fontType !== null) {
+        const fonts = wordDetails.fontNames;
+        // フォント種類名から判定パターンを動的生成
+        // 例: "明朝体" → 明朝・Mincho を含むフォントを合格とする
+        const targetType = rules.fontType; // 例: "明朝体"
+        let targetPatterns = [];
+        let ngPatterns = [];
+
+        if (/明朝/.test(targetType)) {
+          targetPatterns = [/明朝/, /Mincho/i, /Yu Mincho/i, /游明朝/];
+          ngPatterns = [/ゴシック/, /Gothic/i, /Meiryo/i, /メイリオ/, /游ゴシック/, /Yu Gothic/i, /Arial/i, /Helvetica/i];
+        } else if (/ゴシック/.test(targetType)) {
+          targetPatterns = [/ゴシック/, /Gothic/i, /Meiryo/i, /メイリオ/];
+          ngPatterns = [/明朝/, /Mincho/i];
+        } else {
+          // その他のフォント種類：フォント名に種類名が含まれるか確認
+          targetPatterns = [new RegExp(targetType.replace('体', ''))];
+        }
+
+        if (fonts.length === 0) {
+          results.push({ category: '書式設定 b', title: `フォント種類（${targetType}）`,
+            status: 'unknown', detail: 'フォント情報を取得できませんでした。' });
+        } else {
+          const hasTarget = fonts.some(f => targetPatterns.some(p => p.test(f)));
+          const hasNg = fonts.some(f => ngPatterns.some(p => p.test(f)));
+          const ngFonts = fonts.filter(f => ngPatterns.some(p => p.test(f)));
+          const targetFonts = fonts.filter(f => targetPatterns.some(p => p.test(f)));
+
+          if (hasTarget && !hasNg) {
+            results.push({ category: '書式設定 b', title: `フォント種類（${targetType}）`,
+              status: 'pass', detail: `${targetType}フォントが使用されています：${targetFonts.join('、')}` });
+          } else if (!hasTarget) {
+            results.push({ category: '書式設定 b', title: `フォント種類（${targetType}）`,
+              status: 'fail', detail: `${targetType}フォントが見つかりません。検出されたフォント：${fonts.join('、') || 'なし'}` });
+          } else {
+            results.push({ category: '書式設定 b', title: `フォント種類（${targetType}）`,
+              status: 'warn', detail: `${targetType}以外のフォントも使用されています：${ngFonts.join('、')}` });
+          }
+        }
+      }
+
+      // ---- 書式設定 c: プロポーショナルフォント不使用 ----
+      if (rules.noProportionalFont === true) {
+        if (wordDetails.proportionalFontNames && wordDetails.proportionalFontNames.length > 0) {
+          results.push({ category: '書式設定 c', title: 'プロポーショナルフォント不使用',
+            status: 'fail', detail: `プロポーショナルフォントが使用されています：${wordDetails.proportionalFontNames.join('、')}。等幅フォント（MS明朝など）に変更してください。` });
+        } else {
+          results.push({ category: '書式設定 c', title: 'プロポーショナルフォント不使用',
+            status: 'pass', detail: 'プロポーショナルフォント（MSP明朝、MSPゴシック等）は使用されていません。' });
+        }
+      }
+
+      // ---- 注意事項 2: 全角文字 ----
+      if (rules.fullWidthRequired === true) {
+        const hankakuMatches = [...body.matchAll(/[!-~]/g)];
+        if (hankakuMatches.length === 0) {
+          results.push({ category: '注意事項 2', title: '全角文字入力',
+            status: 'pass', detail: '半角文字（英数字・記号）は検出されませんでした。' });
+        } else {
+          const uniqueChars = [...new Set(hankakuMatches.map(m => m[0]))].join('');
+          results.push({ category: '注意事項 2', title: '全角文字入力',
+            status: 'fail', detail: `半角文字が ${hankakuMatches.length} 箇所検出されました。検出文字：「${uniqueChars}」\nすべて全角文字に変換してください。` });
+        }
+      }
+
+      // ---- 注意事項 3: 長音記号 ----
+      if (rules.longVowelRequired === true) {
+        const wrongChars = [
+          { char: '\uFF0D', name: '全角ハイフンマイナス（－）' },
+          { char: '\u2010', name: 'ハイフン（‐）' },
+          { char: '\u2014', name: 'ダッシュ（—）' },
+          { char: '\u2500', name: '罫線（─）' },
+          { char: '\u002D', name: '半角ハイフン（-）' },
+        ];
+        const found = wrongChars
+          .map(({ char, name }) => ({ name, count: (body.split(char)).length - 1 }))
+          .filter(({ count }) => count > 0)
+          .map(({ name, count }) => `${name} × ${count}箇所`);
+
+        if (found.length === 0) {
+          results.push({ category: '注意事項 3', title: '長音記号（ー）の使用',
+            status: 'pass', detail: '長音記号（ー）以外の代替文字は検出されませんでした。' });
+        } else {
+          results.push({ category: '注意事項 3', title: '長音記号（ー）の使用',
+            status: 'fail', detail: `長音記号の代わりに別の文字が使用されている可能性があります：\n${found.join('\n')}\n長音はすべて「ー」で入力してください。` });
+        }
+      }
+
+      // ---- 注意事項 5: 句読点混用禁止 ----
+      if (rules.punctuationMixForbidden === true) {
+        const hasTen = body.includes('、');
+        const hasMaru = body.includes('。');
+        const hasComma = body.includes('，') || body.includes(',');
+        const hasPeriod = body.includes('．') || body.includes('.');
+        const mixedKutenPeriod = hasMaru && hasPeriod;
+        const mixedTotenComma = hasTen && hasComma;
+
+        if (!mixedKutenPeriod && !mixedTotenComma) {
+          const used = [];
+          if (hasMaru) used.push('句点（。）');
+          if (hasTen) used.push('読点（、）');
+          if (hasPeriod) used.push('ピリオド（．）');
+          if (hasComma) used.push('コンマ（，）');
+          results.push({ category: '注意事項 5', title: '句読点・ピリオド・コンマの混用',
+            status: 'pass', detail: `句読点の混用はありません。使用中：${used.join('、') || 'なし'}` });
+        } else {
+          const issues = [];
+          if (mixedKutenPeriod) issues.push('句点（。）とピリオド（．）が混用されています');
+          if (mixedTotenComma) issues.push('読点（、）とコンマ（，）が混用されています');
+          results.push({ category: '注意事項 5', title: '句読点・ピリオド・コンマの混用',
+            status: 'fail', detail: issues.join('\n') + '\n句点↔ピリオド、読点↔コンマは代替可能ですが、混用はエラーです。' });
+        }
+      }
+
+      // =====================================================
+      // 実技用チェック項目（examType === 'practical' の場合のみ）
+      // =====================================================
+      if (rules.examType === 'practical') {
+
+        // ---- 余白チェック ----
+        if (rules.margins !== null && wordDetails.margins) {
+          const m = wordDetails.margins;
+          const target = rules.margins;
+          const tolerance = 2;
+          const sides = [
+            { name: '上', val: m.top },
+            { name: '下', val: m.bottom },
+            { name: '左', val: m.left },
+            { name: '右', val: m.right },
+          ];
+          const mismatches = sides.filter(s => Math.abs(s.val - target) > tolerance);
+          if (mismatches.length === 0) {
+            results.push({ category: '実技', title: `余白（${target}mm）`,
+              status: 'pass', detail: `上下左右の余白が ${target}mm に設定されています（上${m.top}mm 下${m.bottom}mm 左${m.left}mm 右${m.right}mm）。` });
+          } else {
+            const details = mismatches.map(s => `${s.name}: ${s.val}mm`).join('、');
+            results.push({ category: '実技', title: `余白（${target}mm）`,
+              status: 'fail', detail: `余白が指定値（${target}mm）と異なります。${details}。許容範囲: ±${tolerance}mm。` });
+          }
+        }
+
+        // ---- フォントサイズチェック ----
+        if (rules.fontSize !== null && wordDetails.defaultFontSize !== null) {
+          if (wordDetails.defaultFontSize === rules.fontSize) {
+            results.push({ category: '実技', title: `フォントサイズ（${rules.fontSize}pt）`,
+              status: 'pass', detail: `デフォルトフォントサイズが ${rules.fontSize}pt に設定されています。` });
+          } else {
+            results.push({ category: '実技', title: `フォントサイズ（${rules.fontSize}pt）`,
+              status: 'fail', detail: `デフォルトフォントサイズが ${wordDetails.defaultFontSize}pt です。${rules.fontSize}pt に変更してください。` });
+          }
+        }
+
+        // ---- 行数チェック ----
+        if (rules.linesPerPage !== null && wordDetails.linesPerPage !== null) {
+          if (wordDetails.linesPerPage === rules.linesPerPage) {
+            results.push({ category: '実技', title: `1ページの行数（${rules.linesPerPage}行）`,
+              status: 'pass', detail: `1ページの行数が ${rules.linesPerPage} 行に設定されています。` });
+          } else {
+            results.push({ category: '実技', title: `1ページの行数（${rules.linesPerPage}行）`,
+              status: 'fail', detail: `1ページの行数が ${wordDetails.linesPerPage} 行です。${rules.linesPerPage} 行に変更してください。` });
+          }
+        }
+
+        // ---- 段落配置チェック（右寄せ・センタリング） ----
+        const rightAligned = wordDetails.paragraphAlignments.filter(p => p.align === 'right');
+        const centerAligned = wordDetails.paragraphAlignments.filter(p => p.align === 'center');
+        if (rightAligned.length > 0 || centerAligned.length > 0) {
+          const detail = [];
+          if (rightAligned.length > 0) detail.push(`右寄せ: ${rightAligned.length}箇所（${rightAligned.map(p => '「' + p.text.slice(0, 20) + '」').join('、')}）`);
+          if (centerAligned.length > 0) detail.push(`センタリング: ${centerAligned.length}箇所（${centerAligned.map(p => '「' + p.text.slice(0, 20) + '」').join('、')}）`);
+          results.push({ category: '実技', title: '段落配置（右寄せ・センタリング）',
+            status: 'pass', detail: detail.join('\n') });
+        } else {
+          results.push({ category: '実技', title: '段落配置（右寄せ・センタリング）',
+            status: 'warn', detail: '右寄せやセンタリングが検出されませんでした。実技問題では通常必要です。' });
+        }
+
+        // ---- 横倍角チェック ----
+        if (wordDetails.hasWideScaling) {
+          results.push({ category: '実技', title: '横倍角（200%スケーリング）',
+            status: 'pass', detail: '横200%スケーリング（横倍角）が適用されています。' });
+        } else {
+          results.push({ category: '実技', title: '横倍角（200%スケーリング）',
+            status: 'warn', detail: '横倍角（200%スケーリング）が検出されませんでした。問題の指示を確認してください。' });
+        }
+
+        // ---- 表構造チェック（セル単位比較） ----
+        if (wordDetails.tables.length > 0 && pdfTables && pdfTables.length > 0) {
+          const count = Math.min(wordDetails.tables.length, pdfTables.length);
+          for (let ti = 0; ti < count; ti++) {
+            const wt = wordDetails.tables[ti];
+            const pt = pdfTables[ti];
+            const sizeMatch = wt.rows === pt.rows && wt.cols === pt.cols;
+            let matchCount = 0;
+            let totalCells = 0;
+            const cellResults = [];
+            const maxRows = Math.max(wt.rows, pt.rows);
+            const maxCols = Math.max(wt.cols, pt.cols);
+            for (let r = 0; r < maxRows; r++) {
+              for (let c = 0; c < maxCols; c++) {
+                const wCell = wt.cells.find(cl => cl.row === r && cl.col === c);
+                const pCell = pt.cells.find(cl => cl.row === r && cl.col === c);
+                const wText = wCell ? wCell.text : '';
+                const pText = pCell ? pCell.text : '';
+                const match = wText === pText;
+                if (match) matchCount++;
+                totalCells++;
+                cellResults.push({ row: r, col: c, wordText: wText, pdfText: pText, match });
+              }
+            }
+            const cellRate = totalCells > 0 ? Math.round((matchCount / totalCells) * 100) : 0;
+            const status = cellRate === 100 ? 'pass' : cellRate >= 70 ? 'warn' : 'fail';
+            results.push({
+              category: '実技', title: `表${ti + 1}（セル単位比較）`,
+              status,
+              detail: `サイズ: PDF=${pt.rows}×${pt.cols} / Word=${wt.rows}×${wt.cols}${sizeMatch ? '（一致）' : '（不一致）'}\nセル一致率: ${cellRate}%（${matchCount}/${totalCells}セル一致）`,
+              tableComparison: { pdfTable: pt, wordTable: wt, cellResults, maxRows, maxCols }
+            });
+          }
+          // 片方にしかない表
+          if (wordDetails.tables.length > pdfTables.length) {
+            for (let ti = pdfTables.length; ti < wordDetails.tables.length; ti++) {
+              results.push({ category: '実技', title: `表${ti + 1}（Word側のみ）`,
+                status: 'warn', detail: `Word側にのみ表が存在します（${wordDetails.tables[ti].rows}行×${wordDetails.tables[ti].cols}列）。PDF側に対応する表がありません。` });
+            }
+          }
+          if (pdfTables.length > wordDetails.tables.length) {
+            for (let ti = wordDetails.tables.length; ti < pdfTables.length; ti++) {
+              results.push({ category: '実技', title: `表${ti + 1}（PDF側のみ）`,
+                status: 'fail', detail: `PDF側にのみ表が存在します（${pdfTables[ti].rows}行×${pdfTables[ti].cols}列）。Word側に対応する表がありません。` });
+            }
+          }
+        } else if (wordDetails.tables.length > 0) {
+          const tableDetails = wordDetails.tables.map((t, i) => `表${i + 1}: ${t.rows}行 × ${t.cols}列`).join('、');
+          results.push({ category: '実技', title: '表構造',
+            status: 'pass', detail: `Word側に表が検出されました。${tableDetails}\nPDF側の表は検出されませんでした。` });
+        } else if (pdfTables && pdfTables.length > 0) {
+          results.push({ category: '実技', title: '表構造',
+            status: 'fail', detail: `PDF側に表が${pdfTables.length}件検出されましたが、Word側に表がありません。` });
+        } else {
+          results.push({ category: '実技', title: '表構造',
+            status: 'unknown', detail: '表が検出されませんでした。問題に表が含まれる場合は確認してください。' });
+        }
+      }
+
+      return results;
+    }
+
+    // =====================================================
+    // チェック結果を描画
+    // =====================================================
+    function renderFormatChecks(results) {
+      const listEl = document.getElementById('check-list');
+      const summaryEl = document.getElementById('check-summary');
+      listEl.innerHTML = '';
+      summaryEl.innerHTML = '';
+
+      const counts = { pass: 0, fail: 0, warn: 0, unknown: 0 };
+      for (const r of results) counts[r.status]++;
+
+      const summaryItems = [
+        { status: 'pass', label: `合格 ${counts.pass}` },
+        { status: 'fail', label: `エラー ${counts.fail}` },
+        { status: 'warn', label: `警告 ${counts.warn}` },
+        { status: 'unknown', label: `不明 ${counts.unknown}` }
+      ];
+      for (const { status, label } of summaryItems) {
+        if (counts[status] > 0) {
+          summaryEl.innerHTML += `
+            <div class="summary-badge">
+              <div class="summary-dot ${status}"></div>
+              <span>${label}</span>
+            </div>`;
+        }
+      }
+
+      if (results.length === 0) {
+        listEl.innerHTML = '<div style="color:#64748b;font-size:0.85rem;padding:12px;">PDFから判定可能なルールが検出されませんでした。</div>';
+        return;
+      }
+
+      for (const r of results) {
+        const icon = r.status === 'pass' ? '✓' : r.status === 'fail' ? '✗' : r.status === 'warn' ? '!' : '?';
+        const detailClass = r.status === 'fail' ? 'fail-detail' : r.status === 'warn' ? 'warn-detail' : '';
+        const detailHtml = escapeHtml(r.detail).replace(/\n/g, '<br>');
+        listEl.innerHTML += `
+          <div class="check-item ${r.status}">
+            <div class="check-badge ${r.status}">${icon}</div>
+            <div class="check-body">
+              <div class="check-title">${escapeHtml(r.category)}　${escapeHtml(r.title)}</div>
+              <div class="check-detail ${detailClass}">${detailHtml}</div>
+            </div>
+          </div>`;
+      }
+    }
+
+    // =====================================================
+    // 表比較結果を描画
+    // =====================================================
+    function renderTableComparison(checkResults) {
+      const section = document.getElementById('table-comparison-section');
+      const content = document.getElementById('table-comparison-content');
+      content.innerHTML = '';
+
+      const tableResults = checkResults.filter(r => r.tableComparison);
+      if (tableResults.length === 0) {
+        section.style.display = 'none';
+        return;
+      }
+      section.style.display = 'block';
+
+      for (const result of tableResults) {
+        const tc = result.tableComparison;
+        const pair = document.createElement('div');
+        pair.className = 'table-comparison-pair';
+        pair.innerHTML = `<h3>${escapeHtml(result.title)}</h3>`;
+
+        const grid = document.createElement('div');
+        grid.className = 'table-comparison-grid';
+
+        // PDF側テーブル
+        const pdfSide = document.createElement('div');
+        pdfSide.className = 'table-side';
+        pdfSide.innerHTML = '<h4>模範解答（PDF）</h4>';
+        pdfSide.appendChild(buildComparisonTable(tc.pdfTable, tc.cellResults, tc.maxRows, tc.maxCols, 'pdf'));
+
+        // Word側テーブル
+        const wordSide = document.createElement('div');
+        wordSide.className = 'table-side';
+        wordSide.innerHTML = '<h4>利用者の解答（Word）</h4>';
+        wordSide.appendChild(buildComparisonTable(tc.wordTable, tc.cellResults, tc.maxRows, tc.maxCols, 'word'));
+
+        grid.appendChild(pdfSide);
+        grid.appendChild(wordSide);
+        pair.appendChild(grid);
+        content.appendChild(pair);
+      }
+    }
+
+    function buildComparisonTable(tableData, cellResults, maxRows, maxCols, side) {
+      const table = document.createElement('table');
+      for (let r = 0; r < maxRows; r++) {
+        const tr = document.createElement('tr');
+        for (let c = 0; c < maxCols; c++) {
+          const td = document.createElement('td');
+          const cellResult = cellResults.find(cr => cr.row === r && cr.col === c);
+          const cell = tableData.cells.find(cl => cl.row === r && cl.col === c);
+          const text = cell ? cell.text : '';
+
+          if (!text) {
+            td.className = 'table-cell-empty';
+            td.textContent = '(空)';
+          } else if (cellResult && cellResult.match) {
+            td.className = 'table-cell-match';
+            td.textContent = text;
+          } else {
+            td.className = 'table-cell-mismatch';
+            td.textContent = text;
+          }
+          tr.appendChild(td);
+        }
+        table.appendChild(tr);
+      }
+      return table;
+    }
+
+    // =====================================================
+    // Word 1行文字数取得（比較表示用）
+    // =====================================================
+    async function detectWordCharsPerLine(file) {
+      // extractWordDetails と同じロジックで計算（重複実装を統一）
+      try {
+        const details = await extractWordDetails(file);
+        return details.charsPerLine;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    // =====================================================
+    // テキスト処理ユーティリティ
+    // =====================================================
+    async function extractWordText(file) {
+      const arrayBuffer = await file.arrayBuffer();
+      const result = await mammoth.extractRawText({ arrayBuffer });
+      return result.value.replace(/^[\n\r\t ]+/, '').replace(/[\n\r\t ]+$/, '');
+    }
+
+    function detectPdfCharsPerLine(pdfLines) {
+      const lengths = pdfLines.map(l => l.trim().length).filter(len => len > 10);
+      if (lengths.length === 0) return null;
+      const freq = {};
+      let maxCount = 0, mode = lengths[0];
+      for (const len of lengths) {
+        freq[len] = (freq[len] || 0) + 1;
+        if (freq[len] > maxCount) { maxCount = freq[len]; mode = len; }
+      }
+      return mode;
+    }
+
+    // =====================================================
+    // 実技PDF青色注釈の除去
+    // =====================================================
+    function stripAnnotations(text) {
+      return text.split('\n').map(line => {
+        // 「← 右寄せする。」「→ センタリング」等の矢印注釈を除去
+        let cleaned = line.replace(/[←→]\s*.+$/g, '');
+        // 「フォントは横200%...」「表の行間は...」「枠内で...」等の指示テキストを除去
+        cleaned = cleaned.replace(/フォントは横\d+%.*/g, '');
+        cleaned = cleaned.replace(/表の行間は.*/g, '');
+        cleaned = cleaned.replace(/枠内で.*/g, '');
+        cleaned = cleaned.replace(/横倍角.*/g, '');
+        cleaned = cleaned.replace(/センタリング.*/g, '');
+        cleaned = cleaned.replace(/右寄せ.*/g, '');
+        return cleaned.trimEnd();
+      }).join('\n');
+    }
+
+    function stripHeader(text) {
+      const lines = text.split('\n');
+
+      // ① 前付きヘッダー行を除外（試験名・主催・日付・制限時間など）
+      const headerLinePatterns = [
+        /公益財団法人/, /全国商業高等学校/, /主催/, /文部科学省/, /後援/,
+        /ビジネス文書実務検定/, /実務検定/, /ビジネス文書/,
+        /速度部門/, /実技部門/, /筆記部門/, /部門問題/, /部門/,
+        /制限時間\s*\d+\s*分/,
+        /[（(]\s*\d+\s*[．.]\s*\d+\s*[．.]\s*\d+\s*[)）]/,  // 日付 (7.11.23)
+        /^第\s*\d+\s*回/,   // 第75回
+        /^第\s*[０-９\d]+\s*[級回]/,  // 第3級
+        /無断複製/, /複製を禁/, /〘/, /〙/, /⑨/, /\(c\)/i,  // 著作権表記
+        /^第\s*[０-９\d]+\s*[級回].*部門問題/,  // 「第3級　速度部門問題（制限時間10分）」
+      ];
+
+      // ② 書式設定・注意事項ブロックを除外するパターン
+      const sectionStartPatterns = [
+        /[〔\[【「]\s*書\s*式\s*設\s*定\s*[〕\]】」]/,
+        /[〔\[【「]\s*注\s*意\s*事\s*項\s*[〕\]】」]/,
+        /試験委員の指示/,
+      ];
+
+      // スキップブロック内と判定する行パターン
+      function isSkipBlockLine(line) {
+        // 書式設定 a. b. c.
+        if (/^[ａｂｃａｂｃabc]\s*[．.]/.test(line)) return true;
+        // 注意事項 1. 2. ... （全角・半角数字）
+        if (/^[１２３４５６７８９1-9]\s*[．．.]/.test(line)) return true;
+        // 受験番号欄
+        if (/受\s*験\s*番\s*号/.test(line)) return true;
+        // ヘッダー行
+        if (headerLinePatterns.some(p => p.test(line))) return true;
+        // ---- 注意事項の折り返し行（句点・読点で終わる、または文の途中から始まる行）----
+        // 末尾が句点・読点・「。」「、」「ただし、」で終わる行
+        if (/[。、]$/.test(line)) return true;
+        // 「こと。」「ない。」「する。」「できる。」「とする。」などで終わる行
+        if (/[こなすでとるい]。$/.test(line)) return true;
+        // 「こと」「ない」単独で終わる行（折り返し末尾）
+        if (/^(こと。?$|に行うこと|ない。?$|する。?$|ること。?$|こと$|とする。$)/.test(line)) return true;
+        // 「リオドを〜」「句点と〜」「ない。混用〜」など注意事項5番の折り返し行を検出
+        // → スキップブロック内で、かつ本文の段落インデント（全角スペース）で始まらない行はすべてスキップ
+        // 本文段落は必ず全角スペース1〜3文字のインデントで始まる
+        if (!/^[　 ]/.test(line)) return true;  // インデントなし = ヘッダー/注意事項の継続行
+        return false;
+      }
+
+      // ステップ1: 全行を走査し、スキップすべき行を除外して本文行だけ残す
+      // アプローチ: セクション開始を検出したら「スキップモード」に入り、
+      // 本文らしい行（全角スペースインデントで始まる段落）が来たら終了
+      let inSkipBlock = false;
+      const bodyLines = [];
+      let foundBody = false;
+
+      for (let j = 0; j < lines.length; j++) {
+        const raw = lines[j].replace(/[\x00-\x1F\x7F]/g, '');
+        const line = raw.trim();
+
+        if (line === '') {
+          // 空行はスキップブロック外のみ保持
+          if (foundBody && !inSkipBlock) bodyLines.push(raw);
+          continue;
+        }
+
+        // ヘッダー行は常に除外
+        if (headerLinePatterns.some(p => p.test(line))) continue;
+        // 受験番号欄は常に除外
+        if (/受\s*験\s*番\s*号/.test(line)) continue;
+
+        // セクション開始検出 → スキップモード開始
+        if (sectionStartPatterns.some(p => p.test(line))) {
+          inSkipBlock = true;
+          continue;
+        }
+
+        if (inSkipBlock) {
+          if (isSkipBlockLine(line)) {
+            continue; // スキップブロック内の行
+          }
+          // 本文らしい行が来た → スキップモード終了
+          inSkipBlock = false;
+          foundBody = true;
+          bodyLines.push(raw);
+        } else {
+          foundBody = true;
+          bodyLines.push(raw);
+        }
+      }
+
+      return bodyLines.join('\n').replace(/^[\n\r\t ]+/, '').replace(/[\n\r\t ]+$/, '');
+    }
+
+    function stripCumulativeCounts(text) {
+      return text.split('\n').map(line => line.replace(/\d{1,4}\s*$/, '').trimEnd()).join('\n');
+    }
+
+    // =====================================================
+    // PDF本文の改行をPDF表示と完全に一致させる
+    // pdftotext -layout の出力形式:
+    //   段落開始行: 先頭に半角スペースが4個以上 → 全角スペース1文字（字下げ）に変換して改行
+    //   継続行:     先頭に半角スペース1個 → 改行を保持したまま次の行に続く
+    //   段落間: 空行なし（PDF表示と同じ）
+    // =====================================================
+    function reconstructPdfParagraphs(text) {
+      const lines = text.split('\n');
+      const resultLines = [];
+
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        // Indentation is now handled during PDF extraction (full-width space inserted)
+        // Just preserve lines as-is, trimming trailing whitespace only
+        if (line.startsWith('\u3000')) {
+          // Line starts with full-width space (indent from PDF extraction)
+          resultLines.push('\u3000' + line.slice(1).replace(/\s+$/, ''));
+        } else {
+          resultLines.push(line.replace(/\s+$/, ''));
+        }
+      }
+
+      return resultLines.join('\n');
+    }
+
+    function normalizeText(text) {
+      return text
+        .replace(/\r\n/g, '\n').replace(/\n{3,}/g, '\n\n')
+        .split('\n')
+        .map(line => {
+          const indentMatch = line.match(/^([　 ]*)/);
+          const indent = indentMatch ? indentMatch[1] : '';
+          const rest = line.slice(indent.length).replace(/[ \t]+/g, ' ').trim();
+          return indent + rest;
+        })
+        .join('\n').replace(/^[\n\r\t ]+/, '').replace(/[\n\r\t ]+$/, '');
+    }
+
+    function calcMatchRate(diffs) {
+      let matchChars = 0, totalChars = 0;
+      for (const part of diffs) {
+        if (!part.added && !part.removed) { matchChars += part.value.length; totalChars += part.value.length; }
+        else if (part.removed) totalChars += part.value.length;
+        else if (part.added) totalChars += part.value.length;
+      }
+      return totalChars === 0 ? 100 : Math.round((matchChars / totalChars) * 100);
+    }
+
+    // 差分ビュー表示:
+    // 表示テキスト同士を直接diff比較し、各側の改行・インデント構造をそのまま保持
+    function renderDiff(pdfDisplayText, wordDisplayText) {
+      const leftEl = document.getElementById('diff-left');
+      const rightEl = document.getElementById('diff-right');
+      leftEl.innerHTML = '';
+      rightEl.innerHTML = '';
+
+      const diffs = Diff.diffChars(pdfDisplayText, wordDisplayText);
+
+      for (const part of diffs) {
+        const escaped = escapeHtml(part.value);
+        if (!part.added && !part.removed) {
+          leftEl.innerHTML += escaped;
+          rightEl.innerHTML += escaped;
+        } else if (part.removed) {
+          leftEl.innerHTML += `<span class="diff-removed">${escaped}</span>`;
+        } else if (part.added) {
+          rightEl.innerHTML += `<span class="diff-added">${escaped}</span>`;
+        }
+      }
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function showScreen(id) {
+      ['upload-screen', 'loading-screen', 'result-screen'].forEach(s => {
+        document.getElementById(s).style.display = 'none';
+      });
+      document.getElementById(id).style.display = 'flex';
+    }
+
+    // =====================================================
+    // メイン処理
+    // =====================================================
+    async function compare() {
+      const errorEl = document.getElementById('error-msg');
+      errorEl.textContent = '';
+
+      if (!pdfFile) { errorEl.textContent = '模範解答のPDFファイルを選択してください。'; return; }
+      if (!wordFile) { errorEl.textContent = '利用者の解答Wordファイルを選択してください。'; return; }
+
+      showScreen('loading-screen');
+
+      try {
+        const [pdfPages, wordText, wordDetails, pdfTables] = await Promise.all([
+          extractPdfAllPages(pdfFile),
+          extractWordText(wordFile),
+          extractWordDetails(wordFile),
+          extractPdfTables(pdfFile)
+        ]);
+        const wordCpl = wordDetails.charsPerLine;
+
+        // 1ページ目：書式設定・注意事項のルール抽出
+        const page1Text = pdfPages[0] || '';
+        const rules = extractRulesFromPdf(page1Text);
+        renderRules(rules);
+
+        // 2ページ目以降：問題文（模範解答テキスト）
+        let bodyPdfText = pdfPages.slice(1).join('\n');
+        // 1ページしかない場合、またはページ2以降が空の場合、ページ1を本文として使用
+        if (!bodyPdfText.trim()) {
+          bodyPdfText = page1Text;
+        }
+
+        // 実技の場合、青色注釈を除去
+        if (rules.examType === 'practical') {
+          bodyPdfText = stripAnnotations(bodyPdfText);
+        }
+
+        // ===== PDF: 表示用テキスト（PDF通りの30字改行・インデント）=====
+        const strippedPdf = stripHeader(bodyPdfText);
+        const cleanPdf = stripCumulativeCounts(strippedPdf);
+        const pdfDisplayText = reconstructPdfParagraphs(cleanPdf);
+
+        // ===== Word: 表示用テキスト（charsPerLine字ごとに折り返し）=====
+        // インデント情報付きテキストを優先使用
+        const wordBodyText = wordDetails.bodyTextWithIndent || wordText;
+        const strippedWord = stripHeader(wordBodyText);
+        const normalizedWord = normalizeText(strippedWord);
+        // PDFの文字数設定（rules.charsPerLine）で折り返し
+        const cplForWrap = rules.charsPerLine || 30;
+        const wordDisplayText = normalizedWord.split('\n').map(para => {
+          if (!para.trim()) return '';
+          // 先頭の全角スペース（インデント）を保持
+          const indent = para.startsWith('\u3000') ? '\u3000' : '';
+          const body = indent ? para.slice(1) : para;
+          // cplForWrap字ごとに改行（先頭行はインデント分も含めてcplForWrap字）
+          const lines = [];
+          let pos = 0;
+          let isFirst = true;
+          while (pos < body.length) {
+            const limit = isFirst ? cplForWrap - (indent ? 1 : 0) : cplForWrap;
+            const chunk = body.slice(pos, pos + limit);
+            lines.push(isFirst ? indent + chunk : chunk);
+            pos += limit;
+            isFirst = false;
+          }
+          return lines.join('\n');
+        }).filter(l => l !== '').join('\n');
+
+        // ===== 差分比較用テキスト（改行・インデントを除去して本文のみ比較）=====
+        // 改行を除去し、段落間を連結して純粋な文字列として比較
+        const pdfCompareText = pdfDisplayText.split('\n').map(l => l.trim()).filter(l => l).join('');
+        const wordCompareText = wordDisplayText.split('\n').map(l => l.trim()).filter(l => l).join('');
+        const diffs = Diff.diffChars(pdfCompareText, wordCompareText);
+
+        // 表示用テキスト（行数・文字数カウント用）
+        const fullPdfText = pdfDisplayText;
+        const fullWordText = wordDisplayText;
+
+        const rate = calcMatchRate(diffs);
+        const rateEl = document.getElementById('match-rate');
+        rateEl.textContent = rate + '%';
+        rateEl.className = 'match-rate-value ' + (rate >= 80 ? 'rate-high' : rate >= 50 ? 'rate-mid' : 'rate-low');
+
+        // 書式・注意事項チェック（PDFから読み取ったルールで判定）
+        const checkResults = runFormatChecks(rules, wordDetails, wordText, pdfTables);
+        renderFormatChecks(checkResults);
+
+        // 表比較結果を表示
+        renderTableComparison(checkResults);
+
+        // 行・文字数比較
+        // 模範解答の1行文字数はPDF1ページ目の書式設定（rules.charsPerLine）を使用
+        const pdfCpl = rules.charsPerLine || null;
+        const pdfCplEl = document.getElementById('pdf-cpl');
+        const wordCplEl = document.getElementById('word-cpl');
+        const cplWarning = document.getElementById('cpl-warning');
+
+        pdfCplEl.textContent = pdfCpl ? pdfCpl + '字' : '不明';
+        wordCplEl.textContent = wordCpl ? wordCpl + '字' : '不明';
+
+        if (pdfCpl && wordCpl && pdfCpl !== wordCpl) {
+          pdfCplEl.className = 'cpl-value cpl-mismatch';
+          wordCplEl.className = 'cpl-value cpl-mismatch';
+          cplWarning.innerHTML = '<div class="chars-per-line-warning">' +
+            '<strong>1行の文字数が一致していません。</strong><br>' +
+            '模範解答は<strong>' + pdfCpl + '字/行</strong>ですが、' +
+            'Wordの設定は<strong>' + wordCpl + '字/行</strong>です。<br>' +
+            'Wordのページ設定で「文字数」を' + pdfCpl + '字に変更してください。</div>';
+        } else if (pdfCpl && wordCpl && pdfCpl === wordCpl) {
+          pdfCplEl.className = 'cpl-value cpl-match';
+          wordCplEl.className = 'cpl-value cpl-match';
+          cplWarning.innerHTML = '';
+        } else {
+          pdfCplEl.className = 'cpl-value';
+          wordCplEl.className = 'cpl-value';
+          cplWarning.innerHTML = '';
+        }
+
+        const pdfLines = pdfDisplayText.split('\n').filter(l => l.trim() !== '');
+        const wordLines = wordDisplayText.split('\n').filter(l => l.trim() !== '');
+        document.getElementById('pdf-lines').textContent = pdfLines.length;
+        document.getElementById('pdf-chars').textContent = pdfCompareText.length;
+        document.getElementById('word-lines').textContent = wordLines.length;
+        document.getElementById('word-chars').textContent = wordCompareText.length;
+
+        renderDiff(pdfDisplayText, wordDisplayText);
+        showScreen('result-screen');
+
+      } catch (e) {
+        console.error(e);
+        showScreen('upload-screen');
+        errorEl.textContent = 'ファイルの解析に失敗しました: ' + e.message;
+      }
+    }
+
+    // =====================================================
+    // 戻る
+    // =====================================================
+    function goBack() {
+      pdfFile = null; wordFile = null;
+
+      const pdfDrop = document.getElementById('pdf-drop');
+      pdfDrop.classList.remove('has-file');
+      pdfDrop.innerHTML = '<p>クリックまたはドラッグ＆ドロップでPDFファイルを選択</p><input type="file" id="pdf-input" accept=".pdf">';
+
+      const wordDrop = document.getElementById('word-drop');
+      wordDrop.classList.remove('has-file');
+      wordDrop.innerHTML = '<p>クリックまたはドラッグ＆ドロップでWordファイルを選択</p><input type="file" id="word-input" accept=".docx">';
+
+      setupDropZone('pdf-drop', 'pdf-input', '.pdf', (file, drop) => { pdfFile = file; setFileDisplay(drop, file.name); });
+      setupDropZone('word-drop', 'word-input', '.docx', (file, drop) => { wordFile = file; setFileDisplay(drop, file.name); });
+
+      document.getElementById('error-msg').textContent = '';
+      showScreen('upload-screen');
+    }
+  </script>
+</body>
+</html>
