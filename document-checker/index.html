@@ -526,6 +526,16 @@
   <script>
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
+    // PDF読み込み共通オプション（日本語CMap対応）
+    function getPdfLoadOptions(data) {
+      return {
+        data: data,
+        cMapUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/cmaps/',
+        cMapPacked: true,
+        standardFontDataUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/standard_fonts/',
+      };
+    }
+
     let pdfFile = null;
     let wordFile = null;
 
@@ -559,22 +569,27 @@
     // =====================================================
     async function extractPdfPageText(pdf, pageNum) {
       const page = await pdf.getPage(pageNum);
-      const content = await page.getTextContent();
-      const items = content.items;
-      if (items.length === 0) return '';
+      // normalizeWhitespace: false で空白を保持、includeMarkedContent: false でマーク付きコンテンツを除外
+      const content = await page.getTextContent({ normalizeWhitespace: false, includeMarkedContent: false });
+      const items = content.items.filter(item => item.str !== undefined);
+      console.log(`[PDF] Page ${pageNum}: ${items.length} text items extracted`);
+      if (items.length === 0) {
+        console.warn(`[PDF] Page ${pageNum}: No text items found. PDF may use embedded fonts or images.`);
+        return '';
+      }
       const sorted = items.slice().sort((a, b) => {
         const ay = Math.round(a.transform[5]);
         const by = Math.round(b.transform[5]);
-        if (Math.abs(ay - by) > 3) return by - ay;
+        if (Math.abs(ay - by) > 5) return by - ay;
         return a.transform[4] - b.transform[4];
       });
 
-      // Group items into lines by Y coordinate
+      // Group items into lines by Y coordinate（5pt閾値でフォントサイズ差を吸収）
       const lines = [];
       let currentLine = null;
       for (const item of sorted) {
         const y = Math.round(item.transform[5]);
-        if (!currentLine || Math.abs(y - currentLine.y) > 3) {
+        if (!currentLine || Math.abs(y - currentLine.y) > 5) {
           currentLine = { y, items: [] };
           lines.push(currentLine);
         }
@@ -582,6 +597,7 @@
       }
 
       // Find the most common X start position (mode) = normal left margin
+      // X座標を5pt単位でバケット化し、微小な座標ズレを吸収
       const xStarts = [];
       for (const line of lines) {
         const firstItem = line.items.find(i => i.str.trim());
@@ -591,8 +607,9 @@
       let modeX = xStarts[0] || 0;
       let modeCount = 0;
       for (const x of xStarts) {
-        xFreq[x] = (xFreq[x] || 0) + 1;
-        if (xFreq[x] > modeCount) { modeCount = xFreq[x]; modeX = x; }
+        const bucket = Math.round(x / 5) * 5; // 5pt単位に丸めて誤差吸収
+        xFreq[bucket] = (xFreq[bucket] || 0) + 1;
+        if (xFreq[bucket] > modeCount) { modeCount = xFreq[bucket]; modeX = bucket; }
       }
 
       // Build text with indent detection
@@ -603,8 +620,9 @@
         const firstItem = line.items.find(it => it.str.trim());
         if (firstItem) {
           const x = Math.round(firstItem.transform[4]);
+          const xBucket = Math.round(x / 5) * 5;
           // Line starts to the right of the normal margin = paragraph indent
-          if (x > modeX + 5) {
+          if (xBucket > modeX + 5) {
             pageText += '\u3000';
           }
         }
@@ -617,7 +635,7 @@
 
     async function extractPdfAllPages(file) {
       const arrayBuffer = await file.arrayBuffer();
-      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      const pdf = await pdfjsLib.getDocument(getPdfLoadOptions(arrayBuffer)).promise;
       const pages = [];
       for (let i = 1; i <= pdf.numPages; i++) {
         pages.push(await extractPdfPageText(pdf, i));
@@ -630,7 +648,7 @@
     // =====================================================
     async function extractPdfTables(file) {
       const arrayBuffer = await file.arrayBuffer();
-      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      const pdf = await pdfjsLib.getDocument(getPdfLoadOptions(arrayBuffer)).promise;
       const tables = [];
 
       for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
@@ -790,17 +808,19 @@
       for (const line of lines) {
         const trimmed = line.replace(/[\x00-\x1F\x7F]/g, '').trim(); // 制御文字除去
 
-        // セクション開始検出
-        if (/[〔\[【「][\s　]*書[\s　]*式[\s　]*設[\s　]*定[\s　]*[〕\]】」]/.test(trimmed)) {
+        // セクション開始検出（括弧あり・なし、スペース有無に対応）
+        if (/[〔\[【「]?[\s　]*書[\s　]*式[\s　]*設[\s　]*定[\s　]*[〕\]】」]?/.test(trimmed) &&
+            /書\s*式\s*設\s*定/.test(trimmed.replace(/[\s　]/g, ''))) {
           inFormat = true; inNotice = false; continue;
         }
-        if (/[〔\[【「][\s　]*注[\s　]*意[\s　]*事[\s　]*項[\s　]*[〕\]】」]/.test(trimmed)) {
+        if (/[〔\[【「]?[\s　]*注[\s　]*意[\s　]*事[\s　]*項[\s　]*[〕\]】」]?/.test(trimmed) &&
+            /注\s*意\s*事\s*項/.test(trimmed.replace(/[\s　]/g, ''))) {
           inNotice = true; inFormat = false; continue;
         }
 
         if (inFormat) {
           // 注意事項セクション開始で終了
-          if (/[〔\[【「][\s　]*注[\s　]*意/.test(trimmed)) { inFormat = false; inNotice = true; continue; }
+          if (/注\s*意\s*事?\s*項?/.test(trimmed.replace(/[\s　]/g, '')) && /注意/.test(trimmed)) { inFormat = false; inNotice = true; continue; }
           if (trimmed) formatLines.push(trimmed);
         }
         if (inNotice) {
@@ -1640,51 +1660,66 @@
         /^第\s*[０-９\d]+\s*[級回].*部門問題/,  // 「第3級　速度部門問題（制限時間10分）」
       ];
 
-      // ② 書式設定・注意事項ブロックを除外するパターン
+      // ② 書式設定・注意事項ブロックを除外するパターン（括弧あり・なし対応）
       const sectionStartPatterns = [
         /[〔\[【「]\s*書\s*式\s*設\s*定\s*[〕\]】」]/,
         /[〔\[【「]\s*注\s*意\s*事\s*項\s*[〕\]】」]/,
+        /^書\s*式\s*設\s*定$/,
+        /^注\s*意\s*事\s*項$/,
         /試験委員の指示/,
       ];
 
-      // スキップブロック内と判定する行パターン
+      // スキップブロック内と判定する行パターン（注意事項・書式設定の内容行のみを確実に判定）
       function isSkipBlockLine(line) {
-        // 書式設定 a. b. c.
-        if (/^[ａｂｃａｂｃabc]\s*[．.]/.test(line)) return true;
-        // 注意事項 1. 2. ... （全角・半角数字）
-        if (/^[１２３４５６７８９1-9]\s*[．．.]/.test(line)) return true;
+        // 書式設定 a. b. c.（全角・半角）
+        if (/^[ａｂｃabc]\s*[．.]/.test(line)) return true;
+        // 注意事項 1. 2. ... （全角・半角数字＋ピリオド）
+        if (/^[１２３４５６７８９0-9]\s*[．．.]/.test(line)) return true;
         // 受験番号欄
         if (/受\s*験\s*番\s*号/.test(line)) return true;
         // ヘッダー行
         if (headerLinePatterns.some(p => p.test(line))) return true;
-        // ---- 注意事項の折り返し行（句点・読点で終わる、または文の途中から始まる行）----
-        // 末尾が句点・読点・「。」「、」「ただし、」で終わる行
-        if (/[。、]$/.test(line)) return true;
-        // 「こと。」「ない。」「する。」「できる。」「とする。」などで終わる行
-        if (/[こなすでとるい]。$/.test(line)) return true;
-        // 「こと」「ない」単独で終わる行（折り返し末尾）
-        if (/^(こと。?$|に行うこと|ない。?$|する。?$|ること。?$|こと$|とする。$)/.test(line)) return true;
-        // 「リオドを〜」「句点と〜」「ない。混用〜」など注意事項5番の折り返し行を検出
-        // → スキップブロック内で、かつ本文の段落インデント（全角スペース）で始まらない行はすべてスキップ
-        // 本文段落は必ず全角スペース1〜3文字のインデントで始まる
-        if (!/^[　 ]/.test(line)) return true;  // インデントなし = ヘッダー/注意事項の継続行
+        // 注意事項・書式設定に頻出するキーワード（本文には出にくい表現）
+        if (/設定すること/.test(line)) return true;
+        if (/プロポーショナル/.test(line)) return true;
+        if (/試験委員の指示/.test(line)) return true;
+        if (/行うこと[。.]?\s*$/.test(line)) return true;
+        if (/用いること[。.]?\s*$/.test(line)) return true;
+        if (/使用しない/.test(line)) return true;
+        if (/エラーと[すな]/.test(line)) return true;
+        if (/繰り返し入力/.test(line)) return true;
+        if (/全角文字で[入行]/.test(line)) return true;
+        if (/長音記号を用/.test(line)) return true;
+        if (/句点に代[えわ]/.test(line)) return true;
+        if (/読点に代[えわ]/.test(line)) return true;
+        if (/混用し/.test(line)) return true;
+        if (/代替[でが]き/.test(line)) return true;
+        if (/[をは]エラー/.test(line)) return true;
+        if (/フォントの種類/.test(line)) return true;
+        if (/1行[のの]文字数/.test(line)) return true;
+        if (/[余よ]白[はを]/.test(line)) return true;
+        if (/ポイントに?設定/.test(line)) return true;
+        if (/1ページ[のに]?\s*行数/.test(line)) return true;
+        // 注意事項の短い折り返し行（本文は通常もっと長い）
+        if (line.length <= 20 && /(?:こと[。.]?|ない[。.]?|する[。.]?|ること[。.]?|とする[。.]?)$/.test(line)) return true;
         return false;
       }
 
       // ステップ1: 全行を走査し、スキップすべき行を除外して本文行だけ残す
       // アプローチ: セクション開始を検出したら「スキップモード」に入り、
-      // 本文らしい行（全角スペースインデントで始まる段落）が来たら終了
+      // 注意事項・書式設定の内容でない行が来たら本文として扱う
       let inSkipBlock = false;
       const bodyLines = [];
       let foundBody = false;
+      let skipBlockConsecutiveUnmatched = 0; // スキップブロック内で連続してマッチしなかった行数
 
       for (let j = 0; j < lines.length; j++) {
         const raw = lines[j].replace(/[\x00-\x1F\x7F]/g, '');
         const line = raw.trim();
 
         if (line === '') {
-          // 空行はスキップブロック外のみ保持
           if (foundBody && !inSkipBlock) bodyLines.push(raw);
+          // スキップブロック内の空行はリセットしない
           continue;
         }
 
@@ -1696,14 +1731,19 @@
         // セクション開始検出 → スキップモード開始
         if (sectionStartPatterns.some(p => p.test(line))) {
           inSkipBlock = true;
+          skipBlockConsecutiveUnmatched = 0;
           continue;
         }
 
         if (inSkipBlock) {
           if (isSkipBlockLine(line)) {
+            skipBlockConsecutiveUnmatched = 0;
             continue; // スキップブロック内の行
           }
-          // 本文らしい行が来た → スキップモード終了
+          // マッチしない行をカウント
+          skipBlockConsecutiveUnmatched++;
+          // 1行でもマッチしなければ本文開始と判定
+          // （注意事項の後に続く本文を確実にキャッチ）
           inSkipBlock = false;
           foundBody = true;
           bodyLines.push(raw);
@@ -1713,7 +1753,32 @@
         }
       }
 
-      return bodyLines.join('\n').replace(/^[\n\r\t ]+/, '').replace(/[\n\r\t ]+$/, '');
+      const result = bodyLines.join('\n').replace(/^[\n\r\t ]+/, '').replace(/[\n\r\t ]+$/, '');
+
+      // フォールバック: stripHeader で本文が空になった場合、
+      // ヘッダーとセクションマーカーだけ除去して残りを返す
+      if (!result.trim()) {
+        const fallbackLines = [];
+        let inSection = false;
+        for (let j = 0; j < lines.length; j++) {
+          const raw = lines[j].replace(/[\x00-\x1F\x7F]/g, '');
+          const line = raw.trim();
+          if (headerLinePatterns.some(p => p.test(line))) continue;
+          if (/受\s*験\s*番\s*号/.test(line)) continue;
+          if (sectionStartPatterns.some(p => p.test(line))) { inSection = true; continue; }
+          if (inSection) {
+            // セクション内: 番号付き項目 or 文字設定項目はスキップ
+            if (/^[ａｂｃabc]\s*[．.]/.test(line)) continue;
+            if (/^[１２３４５６７８９0-9]\s*[．．.]/.test(line)) continue;
+            // それ以外はセクション終了
+            inSection = false;
+          }
+          fallbackLines.push(raw);
+        }
+        return fallbackLines.join('\n').replace(/^[\n\r\t ]+/, '').replace(/[\n\r\t ]+$/, '');
+      }
+
+      return result;
     }
 
     function stripCumulativeCounts(text) {
@@ -1824,15 +1889,26 @@
         ]);
         const wordCpl = wordDetails.charsPerLine;
 
-        // 1ページ目：書式設定・注意事項のルール抽出
+        // デバッグ: 各ページの抽出文字数をログ
+        console.log('[PDF] Total pages:', pdfPages.length);
+        pdfPages.forEach((p, i) => console.log(`[PDF] Page ${i+1} length: ${p.length} chars`));
+        if (pdfPages.length > 0) console.log('[PDF] Page 1 preview:', pdfPages[0].substring(0, 200));
+
+        // 1ページ目：ルール抽出専用（差分ビューには使わない）
         const page1Text = pdfPages[0] || '';
-        const rules = extractRulesFromPdf(page1Text);
+        let rules = extractRulesFromPdf(page1Text);
+        // 1ページ目でルールが見つからなければ全ページから試行
+        if (!rules.charsPerLine && !rules.formatSection && !rules.noticeSection) {
+          const allPdfText = pdfPages.join('\n');
+          rules = extractRulesFromPdf(allPdfText);
+        }
         renderRules(rules);
 
-        // 2ページ目以降：問題文（模範解答テキスト）
+        // 2ページ目以降：模範解答の本文（差分ビュー用）
         let bodyPdfText = pdfPages.slice(1).join('\n');
-        // 1ページしかない場合、またはページ2以降が空の場合、ページ1を本文として使用
+        // 2ページ目以降が空の場合のみ、1ページ目をフォールバックとして使用
         if (!bodyPdfText.trim()) {
+          console.warn('[PDF] Pages 2+ are empty, falling back to page 1 with header stripping');
           bodyPdfText = page1Text;
         }
 
@@ -1842,9 +1918,13 @@
         }
 
         // ===== PDF: 表示用テキスト（PDF通りの30字改行・インデント）=====
+        console.log('[PDF] bodyPdfText length:', bodyPdfText.length);
         const strippedPdf = stripHeader(bodyPdfText);
+        console.log('[PDF] After stripHeader length:', strippedPdf.length);
+        if (strippedPdf.length === 0) console.warn('[PDF] stripHeader returned empty! bodyPdfText preview:', bodyPdfText.substring(0, 500));
         const cleanPdf = stripCumulativeCounts(strippedPdf);
         const pdfDisplayText = reconstructPdfParagraphs(cleanPdf);
+        console.log('[PDF] Final pdfDisplayText length:', pdfDisplayText.length);
 
         // ===== Word: 表示用テキスト（charsPerLine字ごとに折り返し）=====
         // インデント情報付きテキストを優先使用
