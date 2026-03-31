@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>辞令作成アプリ</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Hiragino Mincho ProN', 'Yu Mincho', 'MS Mincho', serif;
+      background: #f0f0f0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 30px 20px;
+    }
+
+    h1 {
+      font-size: 22px;
+      margin-bottom: 24px;
+      color: #333;
+      font-family: 'Hiragino Sans', 'Yu Gothic', sans-serif;
+    }
+
+    .app-wrapper {
+      display: flex;
+      gap: 40px;
+      align-items: flex-start;
+      flex-wrap: wrap;
+      justify-content: center;
+      width: 100%;
+      max-width: 1100px;
+    }
+
+    /* ---- 入力フォーム ---- */
+    .form-panel {
+      background: #fff;
+      border-radius: 12px;
+      padding: 28px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.12);
+      width: 320px;
+      flex-shrink: 0;
+    }
+
+    .form-panel h2 {
+      font-size: 16px;
+      margin-bottom: 20px;
+      color: #444;
+      font-family: 'Hiragino Sans', 'Yu Gothic', sans-serif;
+      border-bottom: 2px solid #ddd;
+      padding-bottom: 10px;
+    }
+
+    .field {
+      margin-bottom: 18px;
+    }
+
+    label {
+      display: block;
+      font-size: 13px;
+      color: #666;
+      margin-bottom: 6px;
+      font-family: 'Hiragino Sans', 'Yu Gothic', sans-serif;
+    }
+
+    input, textarea {
+      width: 100%;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      padding: 8px 10px;
+      font-size: 14px;
+      font-family: 'Hiragino Sans', 'Yu Gothic', sans-serif;
+      color: #333;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    input:focus, textarea:focus {
+      border-color: #4a7fcb;
+    }
+
+    textarea {
+      resize: vertical;
+      min-height: 60px;
+    }
+
+    .btn-download {
+      width: 100%;
+      padding: 12px;
+      background: #2c5fa8;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 15px;
+      font-family: 'Hiragino Sans', 'Yu Gothic', sans-serif;
+      cursor: pointer;
+      margin-top: 8px;
+      transition: background 0.2s;
+    }
+
+    .btn-download:hover { background: #1e4a8a; }
+    .btn-download:active { background: #163875; }
+
+    /* ---- プレビュー ---- */
+    .preview-panel {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .preview-label {
+      font-size: 13px;
+      color: #888;
+      margin-bottom: 10px;
+      font-family: 'Hiragino Sans', 'Yu Gothic', sans-serif;
+    }
+
+    /* A4: 210mm x 297mm → 595px x 842px (72dpi相当) */
+    #jirei-doc {
+      width: 595px;
+      height: 842px;
+      background: #fff;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+      padding: 80px 70px 60px 70px;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      flex-shrink: 0;
+    }
+
+    .doc-title {
+      text-align: center;
+      font-size: 32px;
+      font-weight: bold;
+      letter-spacing: 20px;
+      margin-bottom: 60px;
+    }
+
+    .doc-recipient {
+      font-size: 18px;
+      letter-spacing: 4px;
+      margin-bottom: 60px;
+    }
+
+    .doc-body {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+    }
+
+    .doc-date-line {
+      font-size: 16px;
+      text-align: center;
+    }
+
+    .doc-role {
+      font-size: 22px;
+      font-weight: bold;
+      text-align: center;
+      margin-top: 14px;
+    }
+
+    .doc-appoint {
+      font-size: 16px;
+      text-align: center;
+    }
+
+    .doc-message {
+      font-size: 16px;
+      text-align: center;
+      margin-top: 20px;
+    }
+
+    .doc-footer {
+      margin-top: auto;
+      text-align: right;
+    }
+
+    .doc-ijou {
+      font-size: 15px;
+      text-align: right;
+      margin-bottom: 16px;
+    }
+
+    .doc-issue-date {
+      font-size: 15px;
+      margin-bottom: 8px;
+    }
+
+    .doc-company {
+      font-size: 14px;
+      line-height: 2;
+    }
+  </style>
+</head>
+<body>
+
+<h1>辞令作成アプリ</h1>
+
+<div class="app-wrapper">
+  <!-- 入力フォーム -->
+  <div class="form-panel">
+    <h2>入力項目</h2>
+
+    <div class="field">
+      <label>宛先（氏名）</label>
+      <input type="text" id="inp-name" placeholder="例：駒淵　芳枝" value="駒淵　芳枝">
+    </div>
+
+    <div class="field">
+      <label>発令日（令和表記）</label>
+      <input type="text" id="inp-appoint-date" placeholder="例：令和8年4月1日" value="令和8年4月1日">
+    </div>
+
+    <div class="field">
+      <label>役職・内容</label>
+      <input type="text" id="inp-role" placeholder="例：主任A" value="主任A">
+    </div>
+
+    <div class="field">
+      <label>発行日（令和表記）</label>
+      <input type="text" id="inp-issue-date" placeholder="例：令和8年3月31日" value="令和8年3月31日">
+    </div>
+
+    <button class="btn-download" onclick="downloadPDF()">PDFをダウンロード</button>
+  </div>
+
+  <!-- プレビュー -->
+  <div class="preview-panel">
+    <div class="preview-label">プレビュー（A4）</div>
+    <div id="jirei-doc">
+      <div class="doc-title">辞　令</div>
+      <div class="doc-recipient" id="prev-recipient">駒淵　芳枝　様</div>
+
+      <div class="doc-body">
+        <div class="doc-date-line" id="prev-appoint-date">令和8年4月1日をもって</div>
+        <div class="doc-role" id="prev-role">主任A</div>
+        <div class="doc-appoint">に任命します。</div>
+        <div class="doc-message" id="prev-message">今後より一層の活躍を期待してます。</div>
+      </div>
+
+      <div class="doc-footer">
+        <div class="doc-ijou">以上</div>
+        <div class="doc-company">
+          <div id="prev-issue-date">令和8年3月31日</div>
+          <div id="prev-company">株式会社ケアマイル</div>
+          <div id="prev-president">代表取締役社長　堀　世至臣</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // 入力→プレビュー リアルタイム更新
+  const bindings = [
+    ['inp-name',         'prev-recipient',    v => v + '　様'],
+    ['inp-appoint-date', 'prev-appoint-date', v => v + 'をもって'],
+    ['inp-role',         'prev-role',         v => v],
+    ['inp-issue-date',   'prev-issue-date',   v => v],
+  ];
+
+  bindings.forEach(([inputId, previewId, transform]) => {
+    const input = document.getElementById(inputId);
+    const preview = document.getElementById(previewId);
+    input.addEventListener('input', () => {
+      preview.textContent = transform(input.value);
+    });
+  });
+
+  // PDF ダウンロード
+  async function downloadPDF() {
+    const name = document.getElementById('inp-name').value.trim() || '辞令';
+    const doc = document.getElementById('jirei-doc');
+
+    const btn = document.querySelector('.btn-download');
+    btn.textContent = '生成中...';
+    btn.disabled = true;
+
+    try {
+      const canvas = await html2canvas(doc, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+      });
+
+      const { jsPDF } = window.jspdf;
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4',
+      });
+
+      const imgData = canvas.toDataURL('image/png');
+      pdf.addImage(imgData, 'PNG', 0, 0, 210, 297);
+      pdf.save(name + '.pdf');
+    } finally {
+      btn.textContent = 'PDFをダウンロード';
+      btn.disabled = false;
+    }
+  }
+</script>
+</body>
+</html>
