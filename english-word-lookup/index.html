@@ -5,11 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>English Word Lookup</title>
   <style>
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
       font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
@@ -40,7 +36,7 @@
       font-size: 1.05rem;
     }
 
-    .search-card {
+    .card {
       background: white;
       border-radius: 20px;
       padding: 2rem;
@@ -49,6 +45,76 @@
       box-shadow: 0 20px 60px rgba(0,0,0,0.2);
     }
 
+    /* API Key section */
+    .api-key-section {
+      margin-bottom: 1.25rem;
+    }
+
+    .api-key-label {
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: #718096;
+      margin-bottom: 0.4rem;
+      display: flex;
+      align-items: center;
+      gap: 0.3rem;
+    }
+
+    .api-key-row {
+      display: flex;
+      gap: 0.6rem;
+    }
+
+    #apiKeyInput {
+      flex: 1;
+      padding: 0.65rem 1rem;
+      border: 2px solid #e2e8f0;
+      border-radius: 10px;
+      font-size: 0.9rem;
+      outline: none;
+      color: #1a202c;
+      font-family: monospace;
+      transition: border-color 0.2s;
+    }
+
+    #apiKeyInput:focus { border-color: #667eea; }
+
+    #saveKeyBtn {
+      padding: 0.65rem 1.1rem;
+      background: #eef2ff;
+      color: #667eea;
+      border: 2px solid #c7d2fe;
+      border-radius: 10px;
+      font-size: 0.88rem;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.15s;
+    }
+
+    #saveKeyBtn:hover { background: #e0e7ff; }
+
+    .key-saved {
+      font-size: 0.8rem;
+      color: #38a169;
+      margin-top: 0.3rem;
+    }
+
+    .key-link {
+      font-size: 0.8rem;
+      color: #667eea;
+      margin-top: 0.3rem;
+    }
+
+    .key-link a { color: #667eea; }
+
+    .divider {
+      border: none;
+      border-top: 1px solid #e2e8f0;
+      margin: 1.25rem 0;
+    }
+
+    /* Search */
     .search-row {
       display: flex;
       gap: 0.75rem;
@@ -65,9 +131,7 @@
       color: #1a202c;
     }
 
-    #wordInput:focus {
-      border-color: #667eea;
-    }
+    #wordInput:focus { border-color: #667eea; }
 
     #searchBtn {
       padding: 0.85rem 1.6rem;
@@ -82,142 +146,10 @@
       white-space: nowrap;
     }
 
-    #searchBtn:hover:not(:disabled) {
-      opacity: 0.9;
-      transform: translateY(-1px);
-    }
+    #searchBtn:hover:not(:disabled) { opacity: 0.9; transform: translateY(-1px); }
+    #searchBtn:disabled { opacity: 0.6; cursor: not-allowed; }
 
-    #searchBtn:disabled {
-      opacity: 0.6;
-      cursor: not-allowed;
-    }
-
-    .results {
-      margin-top: 1.5rem;
-      display: none;
-    }
-
-    .results.visible {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 1.25rem;
-    }
-
-    @media (max-width: 560px) {
-      .results.visible {
-        grid-template-columns: 1fr;
-      }
-    }
-
-    .result-box {
-      background: #f8fafc;
-      border: 1px solid #e2e8f0;
-      border-radius: 14px;
-      padding: 1.25rem;
-      min-height: 180px;
-    }
-
-    .result-box h3 {
-      font-size: 0.78rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      color: #667eea;
-      margin-bottom: 0.75rem;
-      display: flex;
-      align-items: center;
-      gap: 0.4rem;
-    }
-
-    .definition-content {
-      font-size: 0.95rem;
-      line-height: 1.6;
-      color: #2d3748;
-      min-height: 120px;
-    }
-
-    .definition-content h2 {
-      font-size: 1.2rem;
-      margin-bottom: 0.5rem;
-      color: #1a202c;
-    }
-
-    .definition-content strong {
-      color: #4a5568;
-    }
-
-    .definition-content p {
-      margin-bottom: 0.4rem;
-    }
-
-    .definition-content ol, .definition-content ul {
-      margin-left: 1.2rem;
-      margin-bottom: 0.4rem;
-    }
-
-    .image-box {
-      display: flex;
-      flex-direction: column;
-    }
-
-    .image-container {
-      flex: 1;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 200px;
-      border-radius: 10px;
-      overflow: hidden;
-      background: #edf2f7;
-    }
-
-    #generatedImage {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      border-radius: 10px;
-      display: none;
-    }
-
-    .image-placeholder {
-      color: #a0aec0;
-      font-size: 0.9rem;
-      text-align: center;
-      padding: 1rem;
-    }
-
-    .spinner {
-      width: 32px;
-      height: 32px;
-      border: 3px solid #e2e8f0;
-      border-top-color: #667eea;
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
-    }
-
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
-
-    .cursor {
-      display: inline-block;
-      width: 2px;
-      height: 1em;
-      background: #667eea;
-      margin-left: 2px;
-      vertical-align: text-bottom;
-      animation: blink 1s step-end infinite;
-    }
-
-    @keyframes blink {
-      50% { opacity: 0; }
-    }
-
-    .error-msg {
-      color: #e53e3e;
-      font-size: 0.9rem;
-      margin-top: 0.5rem;
-    }
+    .error-msg { color: #e53e3e; font-size: 0.9rem; margin-top: 0.5rem; }
 
     .examples-hint {
       margin-top: 1rem;
@@ -237,9 +169,92 @@
       transition: background 0.15s;
     }
 
-    .chip:hover {
-      background: #e0e7ff;
+    .chip:hover { background: #e0e7ff; }
+
+    /* Results */
+    .results { margin-top: 1.5rem; display: none; }
+
+    .results.visible {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.25rem;
     }
+
+    @media (max-width: 560px) {
+      .results.visible { grid-template-columns: 1fr; }
+    }
+
+    .result-box {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 14px;
+      padding: 1.25rem;
+      min-height: 180px;
+    }
+
+    .result-box h3 {
+      font-size: 0.78rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #667eea;
+      margin-bottom: 0.75rem;
+    }
+
+    .definition-content {
+      font-size: 0.95rem;
+      line-height: 1.6;
+      color: #2d3748;
+      min-height: 120px;
+    }
+
+    .definition-content h2 { font-size: 1.2rem; margin-bottom: 0.5rem; color: #1a202c; }
+    .definition-content strong { color: #4a5568; }
+    .definition-content p { margin-bottom: 0.4rem; }
+    .definition-content ol, .definition-content ul { margin-left: 1.2rem; margin-bottom: 0.4rem; }
+
+    .image-box { display: flex; flex-direction: column; }
+
+    .image-container {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 200px;
+      border-radius: 10px;
+      overflow: hidden;
+      background: #edf2f7;
+    }
+
+    .image-placeholder {
+      color: #a0aec0;
+      font-size: 0.9rem;
+      text-align: center;
+      padding: 1rem;
+    }
+
+    .spinner {
+      width: 32px;
+      height: 32px;
+      border: 3px solid #e2e8f0;
+      border-top-color: #667eea;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .cursor {
+      display: inline-block;
+      width: 2px;
+      height: 1em;
+      background: #667eea;
+      margin-left: 2px;
+      vertical-align: text-bottom;
+      animation: blink 1s step-end infinite;
+    }
+
+    @keyframes blink { 50% { opacity: 0; } }
   </style>
 </head>
 <body>
@@ -248,20 +263,29 @@
     <p>Enter any English word or idiom to get an instant definition and image</p>
   </header>
 
-  <div class="search-card">
+  <div class="card">
+    <!-- API Key -->
+    <div class="api-key-section">
+      <div class="api-key-label">🔑 Gemini API Key</div>
+      <div class="api-key-row">
+        <input type="password" id="apiKeyInput" placeholder="AIza..." autocomplete="off" />
+        <button id="saveKeyBtn">Save</button>
+      </div>
+      <div id="keyStatus" class="key-link">
+        キーを持っていない場合は <a href="https://aistudio.google.com/apikey" target="_blank">こちらで無料取得</a>
+      </div>
+    </div>
+
+    <hr class="divider" />
+
+    <!-- Search -->
     <div class="search-row">
-      <input
-        type="text"
-        id="wordInput"
-        placeholder="e.g. serendipity, break a leg, ambivalent..."
-        autocomplete="off"
-        spellcheck="false"
-      />
+      <input type="text" id="wordInput" placeholder="e.g. serendipity, break a leg..." autocomplete="off" spellcheck="false" />
       <button id="searchBtn">Look Up</button>
     </div>
     <div id="errorMsg" class="error-msg"></div>
 
-    <div class="examples-hint" id="examplesHint">
+    <div class="examples-hint">
       <span class="chip" data-word="serendipity">serendipity</span>
       <span class="chip" data-word="break a leg">break a leg</span>
       <span class="chip" data-word="ephemeral">ephemeral</span>
@@ -276,7 +300,6 @@
           <span class="image-placeholder">Definition will appear here...</span>
         </div>
       </div>
-
       <div class="result-box image-box">
         <h3>🎨 Image</h3>
         <div class="image-container" id="imageContainer">
@@ -286,7 +309,27 @@
     </div>
   </div>
 
-  <script>
+  <script type="module">
+    const SYSTEM_PROMPT = `You are a helpful English dictionary assistant. When given an English word or idiom, provide a clear and concise explanation in the following format:
+
+## [Word/Idiom]
+
+**Type:** [noun/verb/adjective/adverb/idiom/phrase/etc.]
+
+**Meaning:**
+[Clear, simple explanation in 1-3 sentences]
+
+**Example sentences:**
+1. [Natural example sentence]
+2. [Another natural example sentence]
+
+**Memory tip:** [A short, memorable tip or association to help remember the word]
+
+Keep responses concise and educational. Always respond in English.`;
+
+    const apiKeyInput = document.getElementById('apiKeyInput');
+    const saveKeyBtn = document.getElementById('saveKeyBtn');
+    const keyStatus = document.getElementById('keyStatus');
     const wordInput = document.getElementById('wordInput');
     const searchBtn = document.getElementById('searchBtn');
     const definitionContent = document.getElementById('definitionContent');
@@ -294,7 +337,20 @@
     const results = document.getElementById('results');
     const errorMsg = document.getElementById('errorMsg');
 
-    // Example chips
+    // Load saved key
+    const savedKey = localStorage.getItem('gemini_api_key');
+    if (savedKey) {
+      apiKeyInput.value = savedKey;
+      keyStatus.innerHTML = '<span class="key-saved">✓ APIキーが保存されています</span>';
+    }
+
+    saveKeyBtn.addEventListener('click', () => {
+      const key = apiKeyInput.value.trim();
+      if (!key) return;
+      localStorage.setItem('gemini_api_key', key);
+      keyStatus.innerHTML = '<span class="key-saved">✓ 保存しました！</span>';
+    });
+
     document.querySelectorAll('.chip').forEach(chip => {
       chip.addEventListener('click', () => {
         wordInput.value = chip.dataset.word;
@@ -302,10 +358,7 @@
       });
     });
 
-    wordInput.addEventListener('keydown', e => {
-      if (e.key === 'Enter') lookup();
-    });
-
+    wordInput.addEventListener('keydown', e => { if (e.key === 'Enter') lookup(); });
     searchBtn.addEventListener('click', lookup);
 
     function setLoading(loading) {
@@ -313,30 +366,16 @@
       searchBtn.textContent = loading ? 'Looking up...' : 'Look Up';
     }
 
-    function showImageSpinner() {
-      imageContainer.innerHTML = '<div class="spinner"></div>';
-    }
-
-    function showImageError() {
-      imageContainer.innerHTML = '<div class="image-placeholder">Image could not be generated</div>';
-    }
-
     function loadImage(word) {
-      showImageSpinner();
-      const prompt = encodeURIComponent(
-        `${word}, beautiful illustration, artistic, vibrant colors, detailed, high quality`
-      );
+      imageContainer.innerHTML = '<div class="spinner"></div>';
+      const prompt = encodeURIComponent(`${word}, beautiful illustration, artistic, vibrant colors, detailed, high quality`);
       const img = new Image();
       img.src = `https://image.pollinations.ai/prompt/${prompt}?width=512&height=512&nologo=true&seed=${Date.now()}`;
       img.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:10px;';
-      img.onload = () => {
-        imageContainer.innerHTML = '';
-        imageContainer.appendChild(img);
-      };
-      img.onerror = showImageError;
+      img.onload = () => { imageContainer.innerHTML = ''; imageContainer.appendChild(img); };
+      img.onerror = () => { imageContainer.innerHTML = '<div class="image-placeholder">Image could not be generated</div>'; };
     }
 
-    // Simple markdown-to-HTML renderer for Claude's output
     function renderMarkdown(text) {
       return text
         .replace(/^## (.+)$/gm, '<h2>$1</h2>')
@@ -344,81 +383,79 @@
         .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
         .replace(/\*(.+?)\*/g, '<em>$1</em>')
         .replace(/^\d+\. (.+)$/gm, '<li>$1</li>')
-        .replace(/(<li>.*<\/li>\n?)+/g, '<ol>$&</ol>')
+        .replace(/(<li>.*<\/li>\n?)+/g, s => `<ol>${s}</ol>`)
         .replace(/^- (.+)$/gm, '<li>$1</li>')
-        .replace(/(<li>.*<\/li>\n?)+/g, match => match.startsWith('<ol>') ? match : `<ul>${match}</ul>`)
         .replace(/\n\n/g, '</p><p>')
         .replace(/\n/g, '<br>');
     }
 
     async function lookup() {
       const word = wordInput.value.trim();
-      if (!word) {
-        errorMsg.textContent = 'Please enter a word or idiom.';
+      if (!word) { errorMsg.textContent = 'Please enter a word or idiom.'; return; }
+
+      const apiKey = localStorage.getItem('gemini_api_key') || apiKeyInput.value.trim();
+      if (!apiKey) {
+        errorMsg.textContent = 'APIキーを入力して「Save」してください。';
         return;
       }
+
       errorMsg.textContent = '';
       setLoading(true);
       results.classList.add('visible');
-
-      // Reset definition area
       definitionContent.innerHTML = '<span class="cursor"></span>';
-
-      // Start image generation in parallel
       loadImage(word);
 
-      let rawText = '';
-      let done = false;
-
       try {
-        const response = await fetch('/api/lookup', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ word }),
-        });
+        const res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse&key=${apiKey}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
+              contents: [{ role: 'user', parts: [{ text: `Please look up: "${word.slice(0, 200)}"` }] }],
+              generationConfig: { maxOutputTokens: 1024 },
+            }),
+          }
+        );
 
-        if (!response.ok) {
-          throw new Error(`Server error: ${response.status}`);
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err?.error?.message ?? `HTTP ${res.status}`);
         }
 
-        const reader = response.body.getReader();
+        const reader = res.body.getReader();
         const decoder = new TextDecoder();
         let buffer = '';
+        let rawText = '';
 
-        while (!done) {
-          const { value, done: streamDone } = await reader.read();
-          if (streamDone) break;
-
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
           buffer += decoder.decode(value, { stream: true });
           const lines = buffer.split('\n');
-          buffer = lines.pop(); // keep incomplete line
+          buffer = lines.pop();
 
           for (const line of lines) {
             if (!line.startsWith('data: ')) continue;
+            const json = line.slice(6).trim();
+            if (json === '[DONE]') continue;
             try {
-              const parsed = JSON.parse(line.slice(6));
-              if (parsed.type === 'text') {
-                rawText += parsed.content;
+              const parsed = JSON.parse(json);
+              const text = parsed?.candidates?.[0]?.content?.parts?.[0]?.text;
+              if (text) {
+                rawText += text;
                 definitionContent.innerHTML = renderMarkdown(rawText) + '<span class="cursor"></span>';
-              } else if (parsed.type === 'done') {
-                done = true;
-                definitionContent.innerHTML = renderMarkdown(rawText);
-              } else if (parsed.type === 'error') {
-                errorMsg.textContent = parsed.message;
-                definitionContent.innerHTML = '<span class="image-placeholder">Could not fetch definition.</span>';
               }
-            } catch {
-              // Ignore parse errors for malformed lines
-            }
+            } catch { /* skip malformed */ }
           }
         }
+
+        definitionContent.innerHTML = renderMarkdown(rawText) || '<span class="image-placeholder">No definition found.</span>';
       } catch (err) {
-        errorMsg.textContent = 'Connection error. Is the server running?';
-        definitionContent.innerHTML = '<span class="image-placeholder">Error loading definition.</span>';
+        errorMsg.textContent = `Error: ${err.message}`;
+        definitionContent.innerHTML = '<span class="image-placeholder">Could not fetch definition.</span>';
       } finally {
-        if (!done && rawText) {
-          definitionContent.innerHTML = renderMarkdown(rawText);
-        }
         setLoading(false);
       }
     }
