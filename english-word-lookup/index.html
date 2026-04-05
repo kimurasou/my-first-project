@@ -11,38 +11,47 @@
       font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       min-height: 100vh;
+      min-height: 100dvh;
       display: flex;
       flex-direction: column;
       align-items: center;
-      padding: 2rem 1rem;
+      padding: 1.5rem 1rem;
     }
 
     header {
       text-align: center;
       color: white;
-      margin-bottom: 2rem;
+      margin-bottom: 1.5rem;
     }
 
     header h1 {
-      font-size: 2.2rem;
+      font-size: 1.8rem;
       font-weight: 700;
       letter-spacing: -0.5px;
       text-shadow: 0 2px 4px rgba(0,0,0,0.2);
     }
 
     header p {
-      margin-top: 0.5rem;
+      margin-top: 0.4rem;
       opacity: 0.85;
-      font-size: 1.05rem;
+      font-size: 0.95rem;
     }
 
     .card {
       background: white;
       border-radius: 20px;
-      padding: 2rem;
+      padding: 1.25rem;
       width: 100%;
       max-width: 680px;
       box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+    }
+
+    @media (min-width: 480px) {
+      body { padding: 2rem 1rem; }
+      header { margin-bottom: 2rem; }
+      header h1 { font-size: 2.2rem; }
+      header p { font-size: 1.05rem; }
+      .card { padding: 2rem; }
     }
 
     /* API Key section */
@@ -134,16 +143,20 @@
     #wordInput:focus { border-color: #667eea; }
 
     #searchBtn {
-      padding: 0.85rem 1.6rem;
+      padding: 0.85rem 1.1rem;
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       color: white;
       border: none;
       border-radius: 12px;
-      font-size: 1rem;
+      font-size: 0.95rem;
       font-weight: 600;
       cursor: pointer;
       transition: opacity 0.2s, transform 0.1s;
       white-space: nowrap;
+    }
+
+    @media (min-width: 480px) {
+      #searchBtn { padding: 0.85rem 1.6rem; font-size: 1rem; }
     }
 
     #searchBtn:hover:not(:disabled) { opacity: 0.9; transform: translateY(-1px); }
@@ -182,6 +195,8 @@
 
     @media (max-width: 560px) {
       .results.visible { grid-template-columns: 1fr; }
+      .result-box { min-height: unset; }
+      .image-container { min-height: 160px; }
     }
 
     .result-box {
